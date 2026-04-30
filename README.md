@@ -34,3 +34,7 @@ MIT — see [LICENSE](./LICENSE).
 - No telemetry, no analytics, no phoning home.
 - Secrets stay in `.env` (gitignored). The repo ships `.env.example` with placeholders.
 - All threat feed data is treated as untrusted input. Never executed, never rendered as HTML without sanitization.
+
+## Contributing
+
+ReconMesh is in early development. Issues and suggestions welcome via GitHub Issues.
