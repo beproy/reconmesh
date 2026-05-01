@@ -23,7 +23,7 @@ Coming soon — full setup instructions will be added once the MVP is functional
 
 ## Inspired by
 
-OpenCTI, MISP, and the broader open-source CTI community. ReconMesh is not a replacement for those — it's a focused, lightweight complement that prioritizes the `one domain, all the intel` workflow.
+The broader open-source CTI community. ReconMesh is not a replacement for those, it's a focused, lightweight complement that prioritizes the `one domain, all the intel` workflow.
 
 ## License
 
