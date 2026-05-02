@@ -1,54 +1,46 @@
 """
 ReconMesh backend — main application entrypoint.
-Minimal MVP: a /health endpoint that proves the stack is alive.
+
+Endpoints:
+  GET  /                        — landing
+  GET  /health                  — health check (backend, DB, Redis)
+  POST /domains                 — create a domain row
+  GET  /domains/{domain_name}   — fetch all known intel for a domain
 """
-import os
 from contextlib import asynccontextmanager
+from typing import Optional
 
-from fastapi import FastAPI
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
+import os
 import redis
+from fastapi import Depends, FastAPI, HTTPException, status
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session, joinedload
+
+from database import SessionLocal, engine, get_db
+from models import Domain
+from schemas import DomainCreate, DomainOut
 
 
 # ----------------------------------------------------------------------------
-# Configuration — read from environment variables (set by docker-compose)
+# Redis client (used by /health only for now)
 # ----------------------------------------------------------------------------
-POSTGRES_USER = os.environ["POSTGRES_USER"]
-POSTGRES_PASSWORD = os.environ["POSTGRES_PASSWORD"]
-POSTGRES_DB = os.environ["POSTGRES_DB"]
-POSTGRES_HOST = os.environ["POSTGRES_HOST"]
-POSTGRES_PORT = os.environ["POSTGRES_PORT"]
 REDIS_HOST = os.environ["REDIS_HOST"]
 REDIS_PORT = int(os.environ["REDIS_PORT"])
-
-DATABASE_URL = (
-    f"postgresql+psycopg://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
-    f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-)
-
-
-# ----------------------------------------------------------------------------
-# Connection setup
-# ----------------------------------------------------------------------------
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
 
 
+# ----------------------------------------------------------------------------
+# App lifecycle
+# ----------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Runs on startup and shutdown — for now just confirms connections."""
-    # Startup
     print("ReconMesh backend starting up...")
     yield
-    # Shutdown
     print("ReconMesh backend shutting down...")
     engine.dispose()
 
 
-# ----------------------------------------------------------------------------
-# FastAPI app
-# ----------------------------------------------------------------------------
 app = FastAPI(
     title="ReconMesh API",
     description="Domain-centric OSINT aggregator for cyber threat intelligence",
@@ -57,9 +49,11 @@ app = FastAPI(
 )
 
 
+# ----------------------------------------------------------------------------
+# Basic endpoints
+# ----------------------------------------------------------------------------
 @app.get("/")
 def root():
-    """Tiny landing endpoint — useful sanity check."""
     return {
         "name": "ReconMesh",
         "version": "0.1.0",
@@ -70,19 +64,10 @@ def root():
 
 @app.get("/health")
 def health():
-    """
-    Health check — verifies backend is alive AND can reach
-    both PostgreSQL and Redis. Used by Docker's HEALTHCHECK.
-    Returns HTTP 200 if all good, 503 otherwise.
-    """
-    checks = {
-        "backend": "ok",
-        "database": "unknown",
-        "redis": "unknown",
-    }
+    """Health check — backend + database + Redis."""
+    checks = {"backend": "ok", "database": "unknown", "redis": "unknown"}
     healthy = True
 
-    # Database check
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -91,7 +76,6 @@ def health():
         checks["database"] = f"error: {type(e).__name__}"
         healthy = False
 
-    # Redis check
     try:
         if redis_client.ping():
             checks["redis"] = "ok"
@@ -103,3 +87,74 @@ def health():
         healthy = False
 
     return {"healthy": healthy, "checks": checks}
+
+
+# ----------------------------------------------------------------------------
+# Domain endpoints
+# ----------------------------------------------------------------------------
+@app.post(
+    "/domains",
+    response_model=DomainOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a domain row",
+)
+def create_domain(payload: DomainCreate, db: Session = Depends(get_db)):
+    """
+    Create a new domain entry. Domain name must be unique.
+    Used during ingestion (Session 4) and for manual analyst entry.
+    """
+    # Normalize: domain names are case-insensitive
+    name_normalized = payload.name.lower().strip()
+
+    # Derive TLD if not provided
+    tld = payload.tld
+    if tld is None and "." in name_normalized:
+        tld = name_normalized.rsplit(".", 1)[-1]
+
+    domain = Domain(
+        name=name_normalized,
+        tld=tld,
+        risk_score=payload.risk_score,
+    )
+
+    db.add(domain)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Domain '{name_normalized}' already exists",
+        )
+
+    db.refresh(domain)
+    return domain
+
+
+@app.get(
+    "/domains/{domain_name}",
+    response_model=DomainOut,
+    summary="Fetch everything known about a domain",
+)
+def get_domain(domain_name: str, db: Session = Depends(get_db)):
+    """
+    Look up a domain by name. Returns the domain plus all linked indicators.
+    Domain name lookup is case-insensitive.
+    """
+    name_normalized = domain_name.lower().strip()
+
+    # joinedload eagerly fetches the indicators in one query (avoiding N+1)
+    domain: Optional[Domain] = (
+        db.query(Domain)
+        .options(joinedload(Domain.indicators))
+        .filter(Domain.name == name_normalized)
+        .first()
+    )
+
+    if domain is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Domain '{name_normalized}' not found",
+        )
+
+    return domain
