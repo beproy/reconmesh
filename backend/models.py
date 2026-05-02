@@ -192,6 +192,8 @@ class Indicator(Base):
     ingested_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     is_active = Column(Boolean, nullable=False, default=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    reference_urls = Column(ARRAY(String), nullable=False, default=list)
 
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(

@@ -12,14 +12,16 @@ from typing import Optional
 
 import os
 import redis
+from ingesters.urlhaus import UrlhausIngester
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 
 from database import SessionLocal, engine, get_db
-from models import Domain
-from schemas import DomainCreate, DomainOut
+from models import Domain, Indicator, Source
+from schemas import DomainCreate, DomainOut, IngestStatsOut, SourceListOut
 
 
 # ----------------------------------------------------------------------------
@@ -158,3 +160,65 @@ def get_domain(domain_name: str, db: Session = Depends(get_db)):
         )
 
     return domain
+# ----------------------------------------------------------------------------
+# Source endpoints
+# ----------------------------------------------------------------------------
+@app.get(
+    "/sources",
+    response_model=list[SourceListOut],
+    summary="List all ingested sources",
+)
+def list_sources(db: Session = Depends(get_db)):
+    """
+    Returns every source we've ingested from, with a count of indicators
+    each source has contributed.
+    """
+    rows = (
+        db.query(
+            Source,
+            func.count(Indicator.id).label("indicator_count"),
+        )
+        .outerjoin(Indicator, Indicator.source_id == Source.id)
+        .group_by(Source.id)
+        .order_by(Source.name)
+        .all()
+    )
+
+    return [
+        SourceListOut(
+            id=src.id,
+            name=src.name,
+            source_type=src.source_type.value,
+            url=src.url,
+            description=src.description,
+            indicator_count=count,
+        )
+        for src, count in rows
+    ]
+
+
+# ----------------------------------------------------------------------------
+# Feed ingestion endpoints
+# ----------------------------------------------------------------------------
+@app.post(
+    "/feeds/urlhaus/refresh",
+    response_model=IngestStatsOut,
+    summary="Pull fresh data from URLhaus and ingest into the database",
+)
+def refresh_urlhaus(db: Session = Depends(get_db)):
+    """
+    Synchronously fetch URLhaus's recent CSV and ingest it.
+    Existing indicators are updated in place; new ones are inserted.
+    May take 10-30 seconds depending on feed size.
+    """
+    ingester = UrlhausIngester()
+    stats = ingester.ingest(db)
+    return IngestStatsOut(
+        feed="URLhaus",
+        fetched_bytes=stats.fetched,
+        parsed=stats.parsed,
+        inserted=stats.inserted,
+        updated=stats.updated,
+        skipped=stats.skipped,
+        errors=stats.errors,
+    )

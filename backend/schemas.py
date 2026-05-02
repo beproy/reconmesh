@@ -67,3 +67,27 @@ class DomainOut(BaseModel):
     last_seen: Optional[datetime] = None
     risk_score: Optional[int] = None
     indicators: list[IndicatorOut] = []
+    # ----------------------------------------------------------------------------
+# Ingestion schemas
+# ----------------------------------------------------------------------------
+class IngestStatsOut(BaseModel):
+    """Result of an ingestion run."""
+    feed: str
+    fetched_bytes: int
+    parsed: int
+    inserted: int
+    updated: int
+    skipped: int
+    errors: int
+
+
+class SourceListOut(BaseModel):
+    """A source row in a list response."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    source_type: str
+    url: Optional[str] = None
+    description: Optional[str] = None
+    indicator_count: int = 0
