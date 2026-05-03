@@ -63,6 +63,33 @@ services:
     networks:
       - reconmesh-net
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: reconmesh-frontend
+    restart: unless-stopped
+    networks:
+      - reconmesh-net
+    ports:
+      # Bind frontend dev server to localhost only — same as backend
+      - "127.0.0.1:5173:5173"
+    volumes:
+      # Mount the source so file changes hot-reload
+      - ./frontend:/app
+      # IMPORTANT: this anonymous volume "shadows" the host's node_modules
+      # so the container's installed deps aren't overwritten by your laptop's
+      - /app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5173/', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
 networks:
   reconmesh-net:
     driver: bridge
