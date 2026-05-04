@@ -7,6 +7,7 @@ import {
   Globe,
   Shield,
   FileText,
+  Award,
   AlertCircle,
   CheckCircle2,
   XCircle,
@@ -26,18 +27,44 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
+// CT data shape — local to this file because the API client doesn't yet have
+// a dedicated interface for it (we'll add one in api.ts in the next pass).
+interface CtSubdomain {
+  name: string;
+  most_recent_not_before: string;
+}
+
+interface CtData {
+  total_certs_found: number;
+  unique_subdomains_found: number;
+  subdomains_stored: number;
+  subdomains: CtSubdomain[];
+}
+
 // ----------------------------------------------------------------------------
 // Helper: format a date string nicely, or '—' if null
 // ----------------------------------------------------------------------------
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  });
+}
+
+function fmtDateShort(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   });
 }
 
@@ -212,7 +239,6 @@ function EmailSecuritySection(props: { enrichment: Enrichment }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-0 text-sm">
-        {/* SPF */}
         <div>
           <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
             SPF
@@ -233,7 +259,6 @@ function EmailSecuritySection(props: { enrichment: Enrichment }) {
           )}
         </div>
 
-        {/* DMARC */}
         <div>
           <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
             DMARC
@@ -259,7 +284,6 @@ function EmailSecuritySection(props: { enrichment: Enrichment }) {
           )}
         </div>
 
-        {/* DKIM */}
         <div>
           <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
             DKIM
@@ -281,7 +305,6 @@ function EmailSecuritySection(props: { enrichment: Enrichment }) {
           )}
         </div>
 
-        {/* Posture notes */}
         {data.posture?.notes && data.posture.notes.length > 0 && (
           <div className="rounded border border-border/50 bg-muted/30 p-3">
             <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
@@ -412,6 +435,109 @@ function WhoisSection(props: { enrichment: Enrichment }) {
 }
 
 // ----------------------------------------------------------------------------
+// Certificate Transparency section
+// ----------------------------------------------------------------------------
+function CertTransparencySection(props: { enrichment: Enrichment }) {
+  const [showAll, setShowAll] = useState(false);
+  const data = props.enrichment.data as CtData;
+
+  if (props.enrichment.status !== 'ok') {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Award className="h-4 w-4 text-muted-foreground" />
+            Certificate Transparency
+            <StatusIcon status={props.enrichment.status} />
+            <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+              {props.enrichment.status}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          {props.enrichment.status === 'not_found'
+            ? 'No certificates found in CT logs for this domain.'
+            : props.enrichment.status === 'timeout'
+            ? 'crt.sh did not respond in time. Re-enrich to retry.'
+            : props.enrichment.status === 'rate_limited'
+            ? 'crt.sh rate-limited the request. Re-enrich later.'
+            : props.enrichment.error_message || 'CT lookup failed. Re-enrich to retry.'}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const subdomains = data.subdomains || [];
+  const visible = showAll ? subdomains : subdomains.slice(0, 10);
+  const hasMoreInDb = subdomains.length > 10;
+  const hasMoreInCt = data.unique_subdomains_found > data.subdomains_stored;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Award className="h-4 w-4 text-muted-foreground" />
+          Certificate Transparency
+          <StatusIcon status={props.enrichment.status} />
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            {data.total_certs_found} cert{data.total_certs_found === 1 ? '' : 's'} ·{' '}
+            {data.unique_subdomains_found} unique name
+            {data.unique_subdomains_found === 1 ? '' : 's'}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 pt-0 text-sm">
+        {subdomains.length === 0 ? (
+          <div className="text-muted-foreground">
+            No subdomain names found in the certificates.
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1">
+              {visible.map((sub, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between gap-3 border-b border-border/30 pb-1 last:border-0 last:pb-0"
+                >
+                  <span className="break-all font-mono text-xs">{sub.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {fmtDateShort(sub.most_recent_not_before)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {hasMoreInDb && (
+              <button
+                onClick={() => setShowAll(!showAll)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                {showAll
+                  ? 'Show less'
+                  : `Show all ${data.subdomains_stored} stored`}
+              </button>
+            )}
+
+            {hasMoreInCt && (
+              <div className="rounded border border-border/50 bg-muted/30 p-2 text-xs text-muted-foreground">
+                Showing top {data.subdomains_stored} of{' '}
+                {data.unique_subdomains_found} unique names by recency. Older
+                entries omitted.
+              </div>
+            )}
+          </>
+        )}
+
+        <div className="text-xs text-muted-foreground">
+          Source: crt.sh public CT logs. Names from CT logs are a historical
+          record — some may no longer exist or resolve.
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Main page component
 // ----------------------------------------------------------------------------
 export function DomainDetail() {
@@ -427,7 +553,6 @@ export function DomainDetail() {
   const enrichMutation = useMutation({
     mutationFn: () => api.enrichDomain(name!),
     onSuccess: () => {
-      // Refetch the domain to pick up the new enrichments
       queryClient.invalidateQueries({ queryKey: ['domain', name] });
     },
   });
@@ -488,6 +613,7 @@ export function DomainDetail() {
     (e) => e.enrichment_type === 'email_security'
   );
   const whoisEnrichment = data.enrichments.find((e) => e.enrichment_type === 'whois');
+  const ctEnrichment = data.enrichments.find((e) => e.enrichment_type === 'ct_logs');
 
   return (
     <div>
@@ -498,7 +624,6 @@ export function DomainDetail() {
         <ArrowLeft className="h-4 w-4" /> Back to search
       </Link>
 
-      {/* Header row: domain name + indicator count + enrich button */}
       <div className="flex items-center gap-4">
         <div className="flex items-baseline gap-3">
           <h1 className="font-mono text-3xl font-semibold tracking-tight">
@@ -530,7 +655,6 @@ export function DomainDetail() {
         </div>
       </div>
 
-      {/* Overview card */}
       <Card className="mt-6">
         <CardHeader>
           <CardTitle className="text-base">Overview</CardTitle>
@@ -567,7 +691,6 @@ export function DomainDetail() {
         </CardContent>
       </Card>
 
-      {/* Enrichment error display */}
       {enrichMutation.isError && (
         <Card className="mt-4 border-destructive/50">
           <CardContent className="py-3 text-sm text-destructive">
@@ -576,12 +699,11 @@ export function DomainDetail() {
         </Card>
       )}
 
-      {/* Enrichment sections */}
       {data.enrichments.length === 0 ? (
         <Card className="mt-6">
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No enrichment data yet. Click Enrich to run DNS, email security, and
-            WHOIS lookups.
+            No enrichment data yet. Click Enrich to run DNS, email security,
+            WHOIS, and certificate transparency lookups.
           </CardContent>
         </Card>
       ) : (
@@ -595,10 +717,14 @@ export function DomainDetail() {
               <WhoisSection enrichment={whoisEnrichment} />
             </div>
           )}
+          {ctEnrichment && (
+            <div className="lg:col-span-2">
+              <CertTransparencySection enrichment={ctEnrichment} />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Indicators section */}
       {data.indicators.length > 0 && (
         <div className="mt-8">
           <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">

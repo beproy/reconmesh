@@ -35,6 +35,7 @@ from ingesters.urlhaus import UrlhausIngester
 from enrichers.dns_records import DnsEnricher
 from enrichers.email_security import EmailSecurityEnricher
 from enrichers.whois_lookup import WhoisEnricher
+from enrichers.cert_transparency import CertTransparencyEnricher
 
 
 # ----------------------------------------------------------------------------
@@ -208,6 +209,7 @@ def enrich_domain(domain_name: str, db: Session = Depends(get_db)):
         DnsEnricher(),
         EmailSecurityEnricher(),
         WhoisEnricher(),
+        CertTransparencyEnricher(),
     ]
 
     now = datetime.now(timezone.utc)
