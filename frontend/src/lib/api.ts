@@ -1,22 +1,29 @@
 /**
- * ReconMesh API client.
+ * API client for the ReconMesh backend.
  *
- * Centralizes all backend calls. The Vite dev server proxies /api/* to the
- * backend container, so we always call relative URLs starting with /api.
+ * All calls go through the Vite dev-proxy: /api/* on the browser side
+ * is forwarded to backend:8000 inside Docker. In production we'll point
+ * at a real origin; the surface area here doesn't change.
  */
 
-// ---------- Types ----------
+// ----------------------------------------------------------------------------
+// Error type
+// ----------------------------------------------------------------------------
+export class ApiError extends Error {
+  status: number;
+  detail: string;
 
-export type IndicatorType =
-  | 'ipv4' | 'ipv6' | 'url' | 'domain'
-  | 'md5' | 'sha1' | 'sha256'
-  | 'email' | 'asn' | 'bitcoin_address'
-  | 'mutex' | 'file_path' | 'registry_key';
+  constructor(status: number, detail: string) {
+    super(`API error ${status}: ${detail}`);
+    this.status = status;
+    this.detail = detail;
+    this.name = 'ApiError';
+  }
+}
 
-export type Confidence = 'low' | 'medium' | 'high' | 'confirmed';
-
-export type TLP = 'clear' | 'green' | 'amber' | 'amber+strict' | 'red';
-
+// ----------------------------------------------------------------------------
+// Source types
+// ----------------------------------------------------------------------------
 export interface Source {
   id: number;
   name: string;
@@ -25,12 +32,19 @@ export interface Source {
   description: string | null;
 }
 
+export interface SourceListItem extends Source {
+  indicator_count: number;
+}
+
+// ----------------------------------------------------------------------------
+// Indicator types
+// ----------------------------------------------------------------------------
 export interface Indicator {
   id: number;
-  indicator_type: IndicatorType;
+  indicator_type: string;
   value: string;
-  confidence: Confidence;
-  tlp: TLP;
+  confidence: string;
+  tlp: string;
   tags: string[];
   first_seen: string | null;
   last_seen: string | null;
@@ -39,6 +53,103 @@ export interface Indicator {
   source: Source;
 }
 
+// ----------------------------------------------------------------------------
+// Enrichment types — match backend shapes
+// ----------------------------------------------------------------------------
+export type EnrichmentStatus = 'ok' | 'error' | 'timeout' | 'rate_limited' | 'not_found';
+
+// DNS data shape
+export interface DnsRecord {
+  value: string;
+  address?: string;
+  preference?: number;
+  exchange?: string;
+  target?: string;
+  text?: string;
+}
+
+export interface DnsData {
+  records: Record<string, DnsRecord[]>;
+  per_type_status: Record<string, string>;
+}
+
+// Email security data shape
+export interface SpfData {
+  present: boolean;
+  raw: string | null;
+  parsed?: {
+    all: string | null;
+    includes: string[];
+    ip4: string[];
+    ip6: string[];
+  };
+}
+
+export interface DmarcData {
+  present: boolean;
+  raw: string | null;
+  parsed?: {
+    policy: string | null;
+    subdomain_policy: string | null;
+    percent: string | null;
+    rua: string | null;
+    ruf: string | null;
+    alignment_spf: string | null;
+    alignment_dkim: string | null;
+  };
+}
+
+export interface DkimData {
+  present: boolean;
+  selectors_found: string[];
+  raw_records: Array<{ selector: string; raw: string }>;
+  selectors_checked: string[];
+}
+
+export interface PostureData {
+  score: number;
+  tier: 'strong' | 'partial' | 'weak';
+  notes: string[];
+}
+
+export interface EmailSecurityData {
+  spf: SpfData;
+  dmarc: DmarcData;
+  dkim: DkimData;
+  posture: PostureData;
+}
+
+// WHOIS data shape
+export interface WhoisData {
+  registrar: string | null;
+  registrant_org: string | null;
+  registrant_country: string | null;
+  creation_date: string | null;
+  expiration_date: string | null;
+  updated_date: string | null;
+  name_servers: string[];
+  status: string[];
+  emails: string[];
+  dnssec: string | null;
+}
+
+// Generic enrichment record
+export interface Enrichment {
+  enrichment_type: string;
+  status: EnrichmentStatus;
+  data: DnsData | EmailSecurityData | WhoisData | Record<string, unknown>;
+  error_message: string | null;
+  fetched_at: string;
+}
+
+export interface EnrichResponse {
+  domain: string;
+  results: Enrichment[];
+}
+
+// ----------------------------------------------------------------------------
+// Domain types
+// ----------------------------------------------------------------------------
 export interface Domain {
   id: number;
   name: string;
@@ -49,28 +160,17 @@ export interface Domain {
   last_seen: string | null;
   risk_score: number | null;
   indicators: Indicator[];
+  enrichments: Enrichment[];
 }
 
-export interface SourceListItem extends Source {
-  indicator_count: number;
-}
-
-// ---------- API errors ----------
-
-export class ApiError extends Error {
-  status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-  }
-}
-
-// ---------- Helpers ----------
-
+// ----------------------------------------------------------------------------
+// Fetch helper
+// ----------------------------------------------------------------------------
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, init);
+  const response = await fetch(`/api${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  });
 
   if (!response.ok) {
     let detail = response.statusText;
@@ -78,7 +178,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const body = await response.json();
       detail = body.detail || detail;
     } catch {
-      // body wasn't JSON; ignore
+      // Response body not JSON; keep the status text
     }
     throw new ApiError(response.status, detail);
   }
@@ -86,12 +186,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-// ---------- Endpoint functions ----------
-
+// ----------------------------------------------------------------------------
+// Public API
+// ----------------------------------------------------------------------------
 export const api = {
-  /** Fetch a single domain with all its indicators. Throws ApiError on 404. */
-  getDomain: (name: string) => request<Domain>(`/domains/${encodeURIComponent(name)}`),
+  getDomain: (name: string): Promise<Domain> =>
+    request<Domain>(`/domains/${encodeURIComponent(name)}`),
 
-  /** List all sources we've ingested from, with indicator counts. */
-  listSources: () => request<SourceListItem[]>('/sources'),
+  enrichDomain: (name: string): Promise<EnrichResponse> =>
+    request<EnrichResponse>(`/domains/${encodeURIComponent(name)}/enrich`, {
+      method: 'POST',
+    }),
+
+  listSources: (): Promise<SourceListItem[]> => request<SourceListItem[]>('/sources'),
 };
