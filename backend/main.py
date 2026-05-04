@@ -2,26 +2,39 @@
 ReconMesh backend — main application entrypoint.
 
 Endpoints:
-  GET  /                        — landing
-  GET  /health                  — health check (backend, DB, Redis)
-  POST /domains                 — create a domain row
-  GET  /domains/{domain_name}   — fetch all known intel for a domain
+  GET  /                         — landing
+  GET  /health                   — health check (backend, DB, Redis)
+  POST /domains                  — create a domain row
+  GET  /domains/{domain_name}    — fetch all known intel for a domain
+  POST /domains/{domain_name}/enrich — run OSINT enrichers on a domain
+  GET  /sources                  — list ingested feeds
+  POST /feeds/urlhaus/refresh    — pull fresh data from URLhaus
 """
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Optional
 
 import os
 import redis
-from ingesters.urlhaus import UrlhausIngester
 from fastapi import Depends, FastAPI, HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
 
 from database import SessionLocal, engine, get_db
 from models import Domain, Indicator, Source
-from schemas import DomainCreate, DomainOut, IngestStatsOut, SourceListOut
+from schemas import (
+    DomainCreate,
+    DomainOut,
+    EnrichmentOut,
+    EnrichResponseOut,
+    IngestStatsOut,
+    SourceListOut,
+)
+from ingesters.urlhaus import UrlhausIngester
+from enrichers.dns_records import DnsEnricher
+from enrichers.email_security import EmailSecurityEnricher
+from enrichers.whois_lookup import WhoisEnricher
 
 
 # ----------------------------------------------------------------------------
@@ -105,10 +118,8 @@ def create_domain(payload: DomainCreate, db: Session = Depends(get_db)):
     Create a new domain entry. Domain name must be unique.
     Used during ingestion (Session 4) and for manual analyst entry.
     """
-    # Normalize: domain names are case-insensitive
     name_normalized = payload.name.lower().strip()
 
-    # Derive TLD if not provided
     tld = payload.tld
     if tld is None and "." in name_normalized:
         tld = name_normalized.rsplit(".", 1)[-1]
@@ -140,15 +151,17 @@ def create_domain(payload: DomainCreate, db: Session = Depends(get_db)):
 )
 def get_domain(domain_name: str, db: Session = Depends(get_db)):
     """
-    Look up a domain by name. Returns the domain plus all linked indicators.
-    Domain name lookup is case-insensitive.
+    Look up a domain by name. Returns the domain plus all linked indicators
+    and enrichments. Domain name lookup is case-insensitive.
     """
     name_normalized = domain_name.lower().strip()
 
-    # joinedload eagerly fetches the indicators in one query (avoiding N+1)
     domain: Optional[Domain] = (
         db.query(Domain)
-        .options(joinedload(Domain.indicators))
+        .options(
+            joinedload(Domain.indicators),
+            joinedload(Domain.enrichments),
+        )
         .filter(Domain.name == name_normalized)
         .first()
     )
@@ -160,6 +173,60 @@ def get_domain(domain_name: str, db: Session = Depends(get_db)):
         )
 
     return domain
+
+
+@app.post(
+    "/domains/{domain_name}/enrich",
+    response_model=EnrichResponseOut,
+    summary="Run OSINT enrichers on a domain",
+)
+def enrich_domain(domain_name: str, db: Session = Depends(get_db)):
+    """
+    Run all configured enrichers against the domain.
+
+    If the domain doesn't exist yet, it is created automatically — enrichment
+    is a useful entry point that doesn't require pre-seeding.
+
+    Each enricher runs independently. One failing does not block others;
+    each result includes a status (ok / error / timeout / etc.) and an
+    optional error message.
+
+    Re-running this endpoint refreshes existing enrichments (upsert by
+    domain + enrichment_type).
+    """
+    name_normalized = domain_name.lower().strip()
+
+    domain = db.query(Domain).filter(Domain.name == name_normalized).first()
+    if domain is None:
+        tld = name_normalized.rsplit(".", 1)[-1] if "." in name_normalized else None
+        domain = Domain(name=name_normalized, tld=tld)
+        db.add(domain)
+        db.commit()
+        db.refresh(domain)
+
+    enrichers = [
+        DnsEnricher(),
+        EmailSecurityEnricher(),
+        WhoisEnricher(),
+    ]
+
+    now = datetime.now(timezone.utc)
+    results: list[EnrichmentOut] = []
+    for enricher in enrichers:
+        result = enricher.run_and_save(db, domain)
+        results.append(
+            EnrichmentOut(
+                enrichment_type=result.enrichment_type.value,
+                status=result.status.value,
+                data=result.data,
+                error_message=result.error_message,
+                fetched_at=now,
+            )
+        )
+
+    return EnrichResponseOut(domain=name_normalized, results=results)
+
+
 # ----------------------------------------------------------------------------
 # Source endpoints
 # ----------------------------------------------------------------------------

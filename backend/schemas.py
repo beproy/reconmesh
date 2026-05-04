@@ -5,7 +5,7 @@ Distinct from SQLAlchemy models (which are database tables).
 These define what JSON comes in and goes out over HTTP.
 """
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -45,6 +45,26 @@ class IndicatorOut(BaseModel):
 
 
 # ----------------------------------------------------------------------------
+# Enrichment schemas (NEW in Session 6)
+# ----------------------------------------------------------------------------
+class EnrichmentOut(BaseModel):
+    """A single enrichment result attached to a domain."""
+    model_config = ConfigDict(from_attributes=True)
+
+    enrichment_type: str
+    status: str
+    data: dict[str, Any] = {}
+    error_message: Optional[str] = None
+    fetched_at: datetime
+
+
+class EnrichResponseOut(BaseModel):
+    """Response from POST /domains/{name}/enrich — one row per enricher run."""
+    domain: str
+    results: list[EnrichmentOut]
+
+
+# ----------------------------------------------------------------------------
 # Domain schemas
 # ----------------------------------------------------------------------------
 class DomainCreate(BaseModel):
@@ -55,7 +75,7 @@ class DomainCreate(BaseModel):
 
 
 class DomainOut(BaseModel):
-    """How a domain looks when returned by the API (with related indicators)."""
+    """How a domain looks when returned by the API (with related indicators and enrichments)."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -67,7 +87,10 @@ class DomainOut(BaseModel):
     last_seen: Optional[datetime] = None
     risk_score: Optional[int] = None
     indicators: list[IndicatorOut] = []
-    # ----------------------------------------------------------------------------
+    enrichments: list[EnrichmentOut] = []
+
+
+# ----------------------------------------------------------------------------
 # Ingestion schemas
 # ----------------------------------------------------------------------------
 class IngestStatsOut(BaseModel):

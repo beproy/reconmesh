@@ -19,8 +19,10 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
+    func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -140,7 +142,8 @@ class Domain(Base):
 
     # Relationships
     indicators = relationship("Indicator", back_populates="domain")
-    notes = relationship("Note", back_populates="domain")
+    notes = relationship("Note", back_populates="domain", cascade="all, delete-orphan")
+    enrichments = relationship("Enrichment", back_populates="domain", cascade="all, delete-orphan")
 
 
 # ----------------------------------------------------------------------------
@@ -256,3 +259,73 @@ class Note(Base):
     # Relationships
     domain = relationship("Domain", back_populates="notes")
     indicator = relationship("Indicator", back_populates="notes")
+
+
+# ----------------------------------------------------------------------------
+# Enrichment — flexible per-domain OSINT data
+# ----------------------------------------------------------------------------
+class EnrichmentType(str, PyEnum):
+    DNS = "dns"
+    EMAIL_SECURITY = "email_security"
+    WHOIS = "whois"
+    CT_LOGS = "ct_logs"           # reserved for Session 7
+    TYPO_SQUAT = "typo_squat"     # reserved for Session 7
+
+
+class EnrichmentStatus(str, PyEnum):
+    OK = "ok"
+    ERROR = "error"
+    TIMEOUT = "timeout"
+    RATE_LIMITED = "rate_limited"
+    NOT_FOUND = "not_found"
+
+
+class Enrichment(Base):
+    """
+    A single enrichment result for a domain.
+
+    Each (domain_id, enrichment_type) pair is unique — re-running an enricher
+    updates the existing row rather than creating a new one.
+
+    The `data` column is JSONB for flexibility — each enrichment type stores
+    its own shape (DNS records, parsed SPF, WHOIS fields, etc.).
+    """
+    __tablename__ = "enrichments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    domain_id = Column(
+        Integer,
+        ForeignKey("domains.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    enrichment_type = Column(
+        Enum(EnrichmentType, name="enrichment_type_enum"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(
+        Enum(EnrichmentStatus, name="enrichment_status_enum"),
+        nullable=False,
+        default=EnrichmentStatus.OK,
+    )
+    data = Column(JSONB, nullable=False, default=dict)
+    error_message = Column(Text, nullable=True)
+    fetched_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    domain = relationship("Domain", back_populates="enrichments")
+
+    __table_args__ = (
+        UniqueConstraint("domain_id", "enrichment_type", name="uq_domain_enrichment_type"),
+    )
