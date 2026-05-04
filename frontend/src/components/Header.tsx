@@ -11,6 +11,14 @@ export function Header() {
             ReconMesh
           </span>
         </Link>
+        <nav className="flex items-center gap-4">
+          <Link
+            to="/sources"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            Sources
+          </Link>
+        </nav>
       </div>
     </header>
   );
