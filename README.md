@@ -6,6 +6,19 @@ A domain-centric OSINT aggregator for cyber threat intelligence.
 
 Type a domain name (e.g., `example.com`) and ReconMesh consolidates everything the open threat intel ecosystem knows about it: associated IPs, malware/phishing/C2 mentions, ransomware leak references, dark web mentions via Ahmia, and any analyst-added context. Each piece of information is linked to its primary source, with first/last seen dates and confidence levels.
 
+## Optional: pre-loading domains from a CSV
+
+ReconMesh can read a CSV and pre-create `domains` table rows. Useful when
+you want to enrich a known list of domains as a starting point.
+
+The `seed_data/` folder is gitignored except for `README.md` and `example.csv`,
+so any CSVs you drop there stay local. See `seed_data/README.md` for the
+format and `backend/scripts/seed_domains.py` for the loader.
+
+Quick example:
+
+    docker compose exec backend python scripts/seed_domains.py /app/seed_data/example.csv
+
 ## Status
 
 Early development. Built in the open as a learning project and a useful tool.

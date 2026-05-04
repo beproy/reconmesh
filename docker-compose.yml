@@ -60,6 +60,7 @@ services:
       # Mount the backend source code into the container
       # This means code changes show up live without rebuilding the container
       - ./backend:/app
+      - ./seed_data:/app/seed_data:ro
     networks:
       - reconmesh-net
 

@@ -67,3 +67,10 @@ backups/
 # Cached threat feed data — don't ship potentially sensitive feed contents
 feed-cache/
 ingested/
+# Seed data — local-only demo CSVs (e.g. employer-specific domain lists).
+# The folder itself, its README, and example.csv ARE committed; everything
+# else inside it is local-only and never enters the repo.
+seed_data/*
+!seed_data/README.md
+!seed_data/example.csv
+!seed_data/.gitkeep
