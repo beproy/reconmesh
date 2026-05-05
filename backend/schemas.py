@@ -45,7 +45,7 @@ class IndicatorOut(BaseModel):
 
 
 # ----------------------------------------------------------------------------
-# Enrichment schemas (NEW in Session 6)
+# Enrichment schemas
 # ----------------------------------------------------------------------------
 class EnrichmentOut(BaseModel):
     """A single enrichment result attached to a domain."""
@@ -58,10 +58,33 @@ class EnrichmentOut(BaseModel):
     fetched_at: datetime
 
 
-class EnrichResponseOut(BaseModel):
-    """Response from POST /domains/{name}/enrich — one row per enricher run."""
+# ----------------------------------------------------------------------------
+# Enrichment job schemas (NEW in Session 8 — async)
+# ----------------------------------------------------------------------------
+class EnrichJobDispatchedOut(BaseModel):
+    """Returned by POST /domains/{name}/enrich — async dispatch confirmation."""
+    job_id: int
     domain: str
-    results: list[EnrichmentOut]
+    enrichment_types: list[str]
+    poll_url: str  # Frontend uses this directly so it doesn't construct URLs
+
+
+class EnrichJobStatusOut(BaseModel):
+    """
+    Returned by GET /domains/{name}/enrich/{job_id} — current state of an
+    async enrichment job. The frontend polls this until status becomes
+    completed or failed.
+    """
+    id: int
+    domain_id: int
+    status: str
+    total_tasks: int
+    completed_tasks: int
+    failed_tasks: int
+    enrichment_types: list[str]  # Parsed from enrichment_types_csv
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 # ----------------------------------------------------------------------------

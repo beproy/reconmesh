@@ -2,13 +2,14 @@
 ReconMesh backend — main application entrypoint.
 
 Endpoints:
-  GET  /                         — landing
-  GET  /health                   — health check (backend, DB, Redis)
-  POST /domains                  — create a domain row
-  GET  /domains/{domain_name}    — fetch all known intel for a domain
-  POST /domains/{domain_name}/enrich — run OSINT enrichers on a domain
-  GET  /sources                  — list ingested feeds
-  POST /feeds/urlhaus/refresh    — pull fresh data from URLhaus
+  GET  /                                  — landing
+  GET  /health                            — health check (backend, DB, Redis)
+  POST /domains                           — create a domain row
+  GET  /domains/{domain_name}             — fetch all known intel for a domain
+  POST /domains/{domain_name}/enrich      — DISPATCH async enrichment, return job_id
+  GET  /domains/{domain_name}/enrich/{job_id} — poll job progress
+  GET  /sources                           — list ingested feeds
+  POST /feeds/urlhaus/refresh             — pull fresh data from URLhaus
 """
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -22,20 +23,24 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
 from database import SessionLocal, engine, get_db
-from models import Domain, Indicator, Source
+from models import (
+    Domain,
+    EnrichmentJob,
+    EnrichmentJobStatus,
+    EnrichmentType,
+    Indicator,
+    Source,
+)
 from schemas import (
     DomainCreate,
     DomainOut,
-    EnrichmentOut,
-    EnrichResponseOut,
+    EnrichJobDispatchedOut,
+    EnrichJobStatusOut,
     IngestStatsOut,
     SourceListOut,
 )
 from ingesters.urlhaus import UrlhausIngester
-from enrichers.dns_records import DnsEnricher
-from enrichers.email_security import EmailSecurityEnricher
-from enrichers.whois_lookup import WhoisEnricher
-from enrichers.cert_transparency import CertTransparencyEnricher
+from tasks.enrichment_tasks import TASK_FOR_ENRICHMENT_TYPE
 
 
 # ----------------------------------------------------------------------------
@@ -60,7 +65,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ReconMesh API",
     description="Domain-centric OSINT aggregator for cyber threat intelligence",
-    version="0.1.0",
+    version="0.2.0",  # Bumped for async enrichment
     lifespan=lifespan,
 )
 
@@ -72,7 +77,7 @@ app = FastAPI(
 def root():
     return {
         "name": "ReconMesh",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "status": "running",
         "docs": "/docs",
     }
@@ -115,10 +120,6 @@ def health():
     summary="Create a domain row",
 )
 def create_domain(payload: DomainCreate, db: Session = Depends(get_db)):
-    """
-    Create a new domain entry. Domain name must be unique.
-    Used during ingestion (Session 4) and for manual analyst entry.
-    """
     name_normalized = payload.name.lower().strip()
 
     tld = payload.tld
@@ -151,10 +152,6 @@ def create_domain(payload: DomainCreate, db: Session = Depends(get_db)):
     summary="Fetch everything known about a domain",
 )
 def get_domain(domain_name: str, db: Session = Depends(get_db)):
-    """
-    Look up a domain by name. Returns the domain plus all linked indicators
-    and enrichments. Domain name lookup is case-insensitive.
-    """
     name_normalized = domain_name.lower().strip()
 
     domain: Optional[Domain] = (
@@ -178,25 +175,25 @@ def get_domain(domain_name: str, db: Session = Depends(get_db)):
 
 @app.post(
     "/domains/{domain_name}/enrich",
-    response_model=EnrichResponseOut,
-    summary="Run OSINT enrichers on a domain",
+    response_model=EnrichJobDispatchedOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Dispatch async enrichment tasks for a domain",
 )
 def enrich_domain(domain_name: str, db: Session = Depends(get_db)):
     """
-    Run all configured enrichers against the domain.
+    Async enrichment. We:
+      1. Find or create the domain row
+      2. Create an EnrichmentJob row to track this batch
+      3. Dispatch one Celery task per enricher (parallel execution)
+      4. Return the job_id immediately
 
-    If the domain doesn't exist yet, it is created automatically — enrichment
-    is a useful entry point that doesn't require pre-seeding.
-
-    Each enricher runs independently. One failing does not block others;
-    each result includes a status (ok / error / timeout / etc.) and an
-    optional error message.
-
-    Re-running this endpoint refreshes existing enrichments (upsert by
-    domain + enrichment_type).
+    The frontend then polls GET /domains/{name}/enrich/{job_id} until the
+    job status becomes 'completed' or 'failed', and refetches the domain
+    dossier when done to pick up the new enrichment data.
     """
     name_normalized = domain_name.lower().strip()
 
+    # Find or create the domain
     domain = db.query(Domain).filter(Domain.name == name_normalized).first()
     if domain is None:
         tld = name_normalized.rsplit(".", 1)[-1] if "." in name_normalized else None
@@ -205,28 +202,88 @@ def enrich_domain(domain_name: str, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(domain)
 
-    enrichers = [
-        DnsEnricher(),
-        EmailSecurityEnricher(),
-        WhoisEnricher(),
-        CertTransparencyEnricher(),
-    ]
+    # Decide which enrichers to run. For now we always run all of them.
+    # Future: accept a request body with a subset of enrichers.
+    enrichment_types = list(TASK_FOR_ENRICHMENT_TYPE.keys())
 
-    now = datetime.now(timezone.utc)
-    results: list[EnrichmentOut] = []
-    for enricher in enrichers:
-        result = enricher.run_and_save(db, domain)
-        results.append(
-            EnrichmentOut(
-                enrichment_type=result.enrichment_type.value,
-                status=result.status.value,
-                data=result.data,
-                error_message=result.error_message,
-                fetched_at=now,
-            )
+    # Create the EnrichmentJob row
+    job = EnrichmentJob(
+        domain_id=domain.id,
+        status=EnrichmentJobStatus.PENDING,
+        total_tasks=len(enrichment_types),
+        completed_tasks=0,
+        failed_tasks=0,
+        enrichment_types_csv=",".join(et.value for et in enrichment_types),
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    # Dispatch one Celery task per enricher.
+    # We use `.delay()` for clarity — fire and forget. Each task gets the
+    # same job_id and works against it independently.
+    for et in enrichment_types:
+        task = TASK_FOR_ENRICHMENT_TYPE[et]
+        task.delay(job_id=job.id, domain_id=domain.id, domain_name=name_normalized)
+
+    return EnrichJobDispatchedOut(
+        job_id=job.id,
+        domain=name_normalized,
+        enrichment_types=[et.value for et in enrichment_types],
+        poll_url=f"/domains/{name_normalized}/enrich/{job.id}",
+    )
+
+
+@app.get(
+    "/domains/{domain_name}/enrich/{job_id}",
+    response_model=EnrichJobStatusOut,
+    summary="Get the status of an async enrichment job",
+)
+def get_enrich_job(
+    domain_name: str,
+    job_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Returns the current state of an enrichment job. The frontend polls this
+    every couple of seconds until status becomes 'completed' or 'failed'.
+    """
+    name_normalized = domain_name.lower().strip()
+
+    domain = db.query(Domain).filter(Domain.name == name_normalized).first()
+    if domain is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Domain '{name_normalized}' not found",
         )
 
-    return EnrichResponseOut(domain=name_normalized, results=results)
+    job = (
+        db.query(EnrichmentJob)
+        .filter(EnrichmentJob.id == job_id, EnrichmentJob.domain_id == domain.id)
+        .first()
+    )
+    if job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} not found for domain '{name_normalized}'",
+        )
+
+    enrichment_types = (
+        job.enrichment_types_csv.split(",") if job.enrichment_types_csv else []
+    )
+
+    return EnrichJobStatusOut(
+        id=job.id,
+        domain_id=job.domain_id,
+        status=job.status.value,
+        total_tasks=job.total_tasks,
+        completed_tasks=job.completed_tasks,
+        failed_tasks=job.failed_tasks,
+        enrichment_types=enrichment_types,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
 
 
 # ----------------------------------------------------------------------------
@@ -238,10 +295,6 @@ def enrich_domain(domain_name: str, db: Session = Depends(get_db)):
     summary="List all ingested sources",
 )
 def list_sources(db: Session = Depends(get_db)):
-    """
-    Returns every source we've ingested from, with a count of indicators
-    each source has contributed.
-    """
     rows = (
         db.query(
             Source,
@@ -275,11 +328,6 @@ def list_sources(db: Session = Depends(get_db)):
     summary="Pull fresh data from URLhaus and ingest into the database",
 )
 def refresh_urlhaus(db: Session = Depends(get_db)):
-    """
-    Synchronously fetch URLhaus's recent CSV and ingest it.
-    Existing indicators are updated in place; new ones are inserted.
-    May take 10-30 seconds depending on feed size.
-    """
     ingester = UrlhausIngester()
     stats = ingester.ingest(db)
     return IngestStatsOut(

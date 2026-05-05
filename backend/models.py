@@ -144,6 +144,7 @@ class Domain(Base):
     indicators = relationship("Indicator", back_populates="domain")
     notes = relationship("Note", back_populates="domain", cascade="all, delete-orphan")
     enrichments = relationship("Enrichment", back_populates="domain", cascade="all, delete-orphan")
+    enrichment_jobs = relationship("EnrichmentJob", back_populates="domain", cascade="all, delete-orphan")
 
 
 # ----------------------------------------------------------------------------
@@ -279,6 +280,13 @@ class EnrichmentStatus(str, PyEnum):
     RATE_LIMITED = "rate_limited"
     NOT_FOUND = "not_found"
 
+class EnrichmentJobStatus(str, PyEnum):
+    """Lifecycle of an async enrich-domain request."""
+    PENDING = "pending"      # Tasks dispatched, none completed yet
+    RUNNING = "running"      # At least one task in progress
+    COMPLETED = "completed"  # All tasks finished (some may have failed)
+    FAILED = "failed"        # All tasks failed catastrophically (rare)    
+
 
 class Enrichment(Base):
     """
@@ -329,3 +337,44 @@ class Enrichment(Base):
     __table_args__ = (
         UniqueConstraint("domain_id", "enrichment_type", name="uq_domain_enrichment_type"),
     )
+
+class EnrichmentJob(Base):
+    """
+    Tracks one logical "enrich this domain" request that fans out to
+    multiple Celery tasks.
+
+    A user clicks Enrich → backend creates one EnrichmentJob row +
+    dispatches N tasks (one per enricher). Each task writes its result
+    to the `enrichments` table as before, then increments this job's
+    `completed_count`. Frontend polls this row to show progress.
+    """
+    __tablename__ = "enrichment_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    domain_id = Column(
+        Integer,
+        ForeignKey("domains.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(
+        Enum(EnrichmentJobStatus, name="enrichment_job_status_enum"),
+        nullable=False,
+        default=EnrichmentJobStatus.PENDING,
+    )
+    total_tasks = Column(Integer, nullable=False, default=0)
+    completed_tasks = Column(Integer, nullable=False, default=0)
+    failed_tasks = Column(Integer, nullable=False, default=0)
+    # Comma-separated list of enrichment_type values dispatched. Used by the
+    # API to tell the frontend which enrichers were even asked to run.
+    enrichment_types_csv = Column(Text, nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    domain = relationship("Domain", back_populates="enrichment_jobs")
