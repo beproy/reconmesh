@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -21,14 +21,13 @@ import {
   type DnsData,
   type EmailSecurityData,
   type WhoisData,
+  type EnrichJob,
 } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// CT data shape — local to this file because the API client doesn't yet have
-// a dedicated interface for it (we'll add one in api.ts in the next pass).
 interface CtSubdomain {
   name: string;
   most_recent_not_before: string;
@@ -42,7 +41,7 @@ interface CtData {
 }
 
 // ----------------------------------------------------------------------------
-// Helper: format a date string nicely, or '—' if null
+// Helpers
 // ----------------------------------------------------------------------------
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -68,67 +67,83 @@ function fmtDateShort(iso: string | null): string {
   });
 }
 
-// ----------------------------------------------------------------------------
-// Helper: status icon for enrichments
-// ----------------------------------------------------------------------------
 function StatusIcon(props: { status: string }) {
-  if (props.status === 'ok') {
-    return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-  }
-  if (props.status === 'not_found') {
-    return <Search className="h-4 w-4 text-muted-foreground" />;
-  }
-  if (props.status === 'timeout' || props.status === 'rate_limited') {
+  if (props.status === 'ok') return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+  if (props.status === 'not_found') return <Search className="h-4 w-4 text-muted-foreground" />;
+  if (props.status === 'timeout' || props.status === 'rate_limited')
     return <Clock className="h-4 w-4 text-yellow-500" />;
-  }
   return <XCircle className="h-4 w-4 text-destructive" />;
 }
 
-// ----------------------------------------------------------------------------
-// Helper: confidence/TLP badge colors
-// ----------------------------------------------------------------------------
 function confidenceColor(c: string): string {
   switch (c) {
-    case 'CONFIRMED':
-      return 'bg-red-500/20 text-red-300 border-red-500/40';
-    case 'HIGH':
-      return 'bg-orange-500/20 text-orange-300 border-orange-500/40';
-    case 'MEDIUM':
-      return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
-    case 'LOW':
-      return 'bg-blue-500/20 text-blue-300 border-blue-500/40';
-    default:
-      return 'bg-muted text-muted-foreground border-border';
+    case 'CONFIRMED': return 'bg-red-500/20 text-red-300 border-red-500/40';
+    case 'HIGH': return 'bg-orange-500/20 text-orange-300 border-orange-500/40';
+    case 'MEDIUM': return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
+    case 'LOW': return 'bg-blue-500/20 text-blue-300 border-blue-500/40';
+    default: return 'bg-muted text-muted-foreground border-border';
   }
 }
 
 function tlpColor(tlp: string): string {
   switch (tlp) {
-    case 'RED':
-      return 'bg-red-500/20 text-red-300 border-red-500/40';
+    case 'RED': return 'bg-red-500/20 text-red-300 border-red-500/40';
     case 'AMBER_STRICT':
-    case 'AMBER':
-      return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
-    case 'GREEN':
-      return 'bg-green-500/20 text-green-300 border-green-500/40';
-    case 'CLEAR':
-      return 'bg-muted text-muted-foreground border-border';
-    default:
-      return 'bg-muted text-muted-foreground border-border';
+    case 'AMBER': return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+    case 'GREEN': return 'bg-green-500/20 text-green-300 border-green-500/40';
+    case 'CLEAR': return 'bg-muted text-muted-foreground border-border';
+    default: return 'bg-muted text-muted-foreground border-border';
   }
 }
 
 function postureTierColor(tier: string): string {
   switch (tier) {
-    case 'strong':
-      return 'bg-green-500/20 text-green-300 border-green-500/40';
-    case 'partial':
-      return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
-    case 'weak':
-      return 'bg-red-500/20 text-red-300 border-red-500/40';
-    default:
-      return 'bg-muted text-muted-foreground border-border';
+    case 'strong': return 'bg-green-500/20 text-green-300 border-green-500/40';
+    case 'partial': return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40';
+    case 'weak': return 'bg-red-500/20 text-red-300 border-red-500/40';
+    default: return 'bg-muted text-muted-foreground border-border';
   }
+}
+
+// ----------------------------------------------------------------------------
+// Job progress card — only shown while a job is running
+// ----------------------------------------------------------------------------
+function JobProgressCard(props: { job: EnrichJob }) {
+  const j = props.job;
+  const pct = j.total_tasks === 0 ? 0 : Math.round((j.completed_tasks / j.total_tasks) * 100);
+
+  let label: string;
+  if (j.status === 'pending') label = 'Queued — waiting for worker';
+  else if (j.status === 'running') label = `Running — ${j.completed_tasks} of ${j.total_tasks} complete`;
+  else if (j.status === 'completed') label = `Completed — ${j.completed_tasks} of ${j.total_tasks} succeeded`;
+  else label = `Failed — ${j.failed_tasks} of ${j.total_tasks} could not complete`;
+
+  return (
+    <Card className="mt-4 border-primary/30 bg-primary/5">
+      <CardContent className="py-3">
+        <div className="flex items-center gap-3 text-sm">
+          {(j.status === 'pending' || j.status === 'running') && (
+            <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+          )}
+          {j.status === 'completed' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+          {j.status === 'failed' && <XCircle className="h-4 w-4 text-destructive" />}
+          <span className="text-foreground">{label}</span>
+          {j.failed_tasks > 0 && j.status !== 'failed' && (
+            <Badge className="ml-2 bg-yellow-500/20 text-yellow-300 border-yellow-500/40 text-xs">
+              {j.failed_tasks} failed
+            </Badge>
+          )}
+        </div>
+        {/* Thin progress bar */}
+        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full bg-primary transition-all duration-300"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 // ----------------------------------------------------------------------------
@@ -243,19 +258,13 @@ function EmailSecuritySection(props: { enrichment: Enrichment }) {
           <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
             SPF
             {data.spf?.present ? (
-              <Badge className="bg-green-500/20 text-green-300 border-green-500/40">
-                present
-              </Badge>
+              <Badge className="bg-green-500/20 text-green-300 border-green-500/40">present</Badge>
             ) : (
-              <Badge className="bg-red-500/20 text-red-300 border-red-500/40">
-                absent
-              </Badge>
+              <Badge className="bg-red-500/20 text-red-300 border-red-500/40">absent</Badge>
             )}
           </div>
           {data.spf?.raw && (
-            <div className="break-all font-mono text-xs text-foreground">
-              {data.spf.raw}
-            </div>
+            <div className="break-all font-mono text-xs text-foreground">{data.spf.raw}</div>
           )}
         </div>
 
@@ -263,13 +272,9 @@ function EmailSecuritySection(props: { enrichment: Enrichment }) {
           <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
             DMARC
             {data.dmarc?.present ? (
-              <Badge className="bg-green-500/20 text-green-300 border-green-500/40">
-                present
-              </Badge>
+              <Badge className="bg-green-500/20 text-green-300 border-green-500/40">present</Badge>
             ) : (
-              <Badge className="bg-red-500/20 text-red-300 border-red-500/40">
-                absent
-              </Badge>
+              <Badge className="bg-red-500/20 text-red-300 border-red-500/40">absent</Badge>
             )}
             {data.dmarc?.parsed?.policy && (
               <Badge className="bg-muted text-foreground border-border">
@@ -278,9 +283,7 @@ function EmailSecuritySection(props: { enrichment: Enrichment }) {
             )}
           </div>
           {data.dmarc?.raw && (
-            <div className="break-all font-mono text-xs text-foreground">
-              {data.dmarc.raw}
-            </div>
+            <div className="break-all font-mono text-xs text-foreground">{data.dmarc.raw}</div>
           )}
         </div>
 
@@ -299,17 +302,13 @@ function EmailSecuritySection(props: { enrichment: Enrichment }) {
             )}
           </div>
           {data.dkim?.selectors_found && data.dkim.selectors_found.length > 0 && (
-            <div className="font-mono text-xs">
-              {data.dkim.selectors_found.join(', ')}
-            </div>
+            <div className="font-mono text-xs">{data.dkim.selectors_found.join(', ')}</div>
           )}
         </div>
 
         {data.posture?.notes && data.posture.notes.length > 0 && (
           <div className="rounded border border-border/50 bg-muted/30 p-3">
-            <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
-              Notes
-            </div>
+            <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">Notes</div>
             <ul className="space-y-1 text-xs">
               {data.posture.notes.map((note, idx) => (
                 <li key={idx} className="text-muted-foreground">
@@ -371,15 +370,11 @@ function WhoisSection(props: { enrichment: Enrichment }) {
             <div className="text-foreground">{data.registrar || '—'}</div>
           </div>
           <div>
-            <div className="text-xs uppercase text-muted-foreground">
-              Registrant org
-            </div>
+            <div className="text-xs uppercase text-muted-foreground">Registrant org</div>
             <div className="text-foreground">{data.registrant_org || '—'}</div>
           </div>
           <div>
-            <div className="text-xs uppercase text-muted-foreground">
-              Registered
-            </div>
+            <div className="text-xs uppercase text-muted-foreground">Registered</div>
             <div className="text-foreground">{fmtDate(data.creation_date)}</div>
           </div>
           <div>
@@ -398,9 +393,7 @@ function WhoisSection(props: { enrichment: Enrichment }) {
 
         {data.name_servers && data.name_servers.length > 0 && (
           <div>
-            <div className="mb-1 text-xs uppercase text-muted-foreground">
-              Name servers
-            </div>
+            <div className="mb-1 text-xs uppercase text-muted-foreground">Name servers</div>
             <div className="space-y-0.5 font-mono text-xs">
               {data.name_servers.map((ns, idx) => (
                 <div key={idx}>{ns}</div>
@@ -512,25 +505,22 @@ function CertTransparencySection(props: { enrichment: Enrichment }) {
                 onClick={() => setShowAll(!showAll)}
                 className="text-xs text-muted-foreground hover:text-foreground"
               >
-                {showAll
-                  ? 'Show less'
-                  : `Show all ${data.subdomains_stored} stored`}
+                {showAll ? 'Show less' : `Show all ${data.subdomains_stored} stored`}
               </button>
             )}
 
             {hasMoreInCt && (
               <div className="rounded border border-border/50 bg-muted/30 p-2 text-xs text-muted-foreground">
-                Showing top {data.subdomains_stored} of{' '}
-                {data.unique_subdomains_found} unique names by recency. Older
-                entries omitted.
+                Showing top {data.subdomains_stored} of {data.unique_subdomains_found} unique
+                names by recency. Older entries omitted.
               </div>
             )}
           </>
         )}
 
         <div className="text-xs text-muted-foreground">
-          Source: crt.sh public CT logs. Names from CT logs are a historical
-          record — some may no longer exist or resolve.
+          Source: crt.sh public CT logs. Names from CT logs are a historical record — some may
+          no longer exist or resolve.
         </div>
       </CardContent>
     </Card>
@@ -544,18 +534,57 @@ export function DomainDetail() {
   const { name } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery<Domain>({
+  // The domain dossier
+  const {
+    data,
+    isLoading,
+    error,
+  } = useQuery<Domain>({
     queryKey: ['domain', name],
     queryFn: () => api.getDomain(name!),
     enabled: !!name,
   });
 
-  const enrichMutation = useMutation({
-    mutationFn: () => api.enrichDomain(name!),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['domain', name] });
+  // Tracks the in-flight enrichment job, if any
+  const [activeJobId, setActiveJobId] = useState<number | null>(null);
+
+  // Polls the job's status while one is active
+  const jobQuery = useQuery<EnrichJob>({
+    queryKey: ['enrich-job', name, activeJobId],
+    queryFn: () => api.getEnrichJob(name!, activeJobId!),
+    enabled: !!name && activeJobId !== null,
+    // Poll every 2 seconds; stop once the job reaches a terminal state.
+    refetchInterval: (query) => {
+      const job = query.state.data as EnrichJob | undefined;
+      if (!job) return 2000;
+      if (job.status === 'completed' || job.status === 'failed') return false;
+      return 2000;
     },
   });
+
+  // When polling reports a terminal state, stop polling and refresh the dossier
+  useEffect(() => {
+    if (
+      jobQuery.data &&
+      (jobQuery.data.status === 'completed' || jobQuery.data.status === 'failed') &&
+      activeJobId !== null
+    ) {
+      queryClient.invalidateQueries({ queryKey: ['domain', name] });
+      setActiveJobId(null);
+    }
+  }, [jobQuery.data, activeJobId, name, queryClient]);
+
+  // Dispatching a new enrich job
+  const dispatchMutation = useMutation({
+    mutationFn: () => api.enrichDomainAsync(name!),
+    onSuccess: (data) => {
+      setActiveJobId(data.job_id);
+    },
+  });
+
+  const isJobInFlight = activeJobId !== null && jobQuery.data
+    ? jobQuery.data.status === 'pending' || jobQuery.data.status === 'running'
+    : dispatchMutation.isPending;
 
   if (isLoading) {
     return (
@@ -583,12 +612,12 @@ export function DomainDetail() {
               {(error as Error).message || 'Domain not found'}
             </div>
             <Button
-              onClick={() => enrichMutation.mutate()}
-              disabled={enrichMutation.isPending}
+              onClick={() => dispatchMutation.mutate()}
+              disabled={isJobInFlight}
               className="mt-4"
               size="sm"
             >
-              {enrichMutation.isPending ? (
+              {isJobInFlight ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   Running enrichers...
@@ -626,9 +655,7 @@ export function DomainDetail() {
 
       <div className="flex items-center gap-4">
         <div className="flex items-baseline gap-3">
-          <h1 className="font-mono text-3xl font-semibold tracking-tight">
-            {data.name}
-          </h1>
+          <h1 className="font-mono text-3xl font-semibold tracking-tight">{data.name}</h1>
           <span className="text-sm text-muted-foreground">
             {data.indicators.length} indicator
             {data.indicators.length === 1 ? '' : 's'}
@@ -636,14 +663,14 @@ export function DomainDetail() {
         </div>
         <div className="ml-auto">
           <Button
-            onClick={() => enrichMutation.mutate()}
-            disabled={enrichMutation.isPending}
+            onClick={() => dispatchMutation.mutate()}
+            disabled={isJobInFlight}
             size="sm"
           >
-            {enrichMutation.isPending ? (
+            {isJobInFlight ? (
               <>
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                Running enrichers...
+                Running...
               </>
             ) : (
               <>
@@ -654,6 +681,11 @@ export function DomainDetail() {
           </Button>
         </div>
       </div>
+
+      {/* Job progress card — only shown while a job is active */}
+      {jobQuery.data && (jobQuery.data.status === 'pending' || jobQuery.data.status === 'running') && (
+        <JobProgressCard job={jobQuery.data} />
+      )}
 
       <Card className="mt-6">
         <CardHeader>
@@ -682,19 +714,17 @@ export function DomainDetail() {
               <div>{data.risk_score ?? '—'}</div>
             </div>
             <div>
-              <div className="text-xs uppercase text-muted-foreground">
-                Indicators
-              </div>
+              <div className="text-xs uppercase text-muted-foreground">Indicators</div>
               <div>{data.indicators.length}</div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {enrichMutation.isError && (
+      {dispatchMutation.isError && (
         <Card className="mt-4 border-destructive/50">
           <CardContent className="py-3 text-sm text-destructive">
-            Enrichment failed: {(enrichMutation.error as Error).message}
+            Could not dispatch enrichment: {(dispatchMutation.error as Error).message}
           </CardContent>
         </Card>
       )}
@@ -702,8 +732,8 @@ export function DomainDetail() {
       {data.enrichments.length === 0 ? (
         <Card className="mt-6">
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No enrichment data yet. Click Enrich to run DNS, email security,
-            WHOIS, and certificate transparency lookups.
+            No enrichment data yet. Click Enrich to run DNS, email security, WHOIS, and
+            certificate transparency lookups.
           </CardContent>
         </Card>
       ) : (
@@ -765,8 +795,7 @@ export function DomainDetail() {
                   )}
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>
-                      Source:{' '}
-                      <span className="text-foreground">{ind.source.name}</span>
+                      Source: <span className="text-foreground">{ind.source.name}</span>
                     </span>
                     <span>First seen: {fmtDate(ind.first_seen)}</span>
                     <span>Last seen: {fmtDate(ind.last_seen)}</span>

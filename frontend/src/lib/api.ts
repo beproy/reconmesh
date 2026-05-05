@@ -58,7 +58,6 @@ export interface Indicator {
 // ----------------------------------------------------------------------------
 export type EnrichmentStatus = 'ok' | 'error' | 'timeout' | 'rate_limited' | 'not_found';
 
-// DNS data shape
 export interface DnsRecord {
   value: string;
   address?: string;
@@ -73,7 +72,6 @@ export interface DnsData {
   per_type_status: Record<string, string>;
 }
 
-// Email security data shape
 export interface SpfData {
   present: boolean;
   raw: string | null;
@@ -119,7 +117,6 @@ export interface EmailSecurityData {
   posture: PostureData;
 }
 
-// WHOIS data shape
 export interface WhoisData {
   registrar: string | null;
   registrant_org: string | null;
@@ -133,7 +130,6 @@ export interface WhoisData {
   dnssec: string | null;
 }
 
-// Generic enrichment record
 export interface Enrichment {
   enrichment_type: string;
   status: EnrichmentStatus;
@@ -142,9 +138,29 @@ export interface Enrichment {
   fetched_at: string;
 }
 
-export interface EnrichResponse {
+// ----------------------------------------------------------------------------
+// Async enrichment job types (NEW in Session 8)
+// ----------------------------------------------------------------------------
+export type EnrichJobStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface EnrichJobDispatched {
+  job_id: number;
   domain: string;
-  results: Enrichment[];
+  enrichment_types: string[];
+  poll_url: string;
+}
+
+export interface EnrichJob {
+  id: number;
+  domain_id: number;
+  status: EnrichJobStatus;
+  total_tasks: number;
+  completed_tasks: number;
+  failed_tasks: number;
+  enrichment_types: string[];
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
 }
 
 // ----------------------------------------------------------------------------
@@ -193,10 +209,27 @@ export const api = {
   getDomain: (name: string): Promise<Domain> =>
     request<Domain>(`/domains/${encodeURIComponent(name)}`),
 
-  enrichDomain: (name: string): Promise<EnrichResponse> =>
-    request<EnrichResponse>(`/domains/${encodeURIComponent(name)}/enrich`, {
-      method: 'POST',
-    }),
+  /**
+   * Dispatch async enrichment. Returns immediately with a job_id; the
+   * actual work happens in the Celery worker.
+   * Status code is 202 Accepted, but our request() helper handles 2xx the
+   * same way so we just consume the JSON body.
+   */
+  enrichDomainAsync: (name: string): Promise<EnrichJobDispatched> =>
+    request<EnrichJobDispatched>(
+      `/domains/${encodeURIComponent(name)}/enrich`,
+      { method: 'POST' }
+    ),
+
+  /**
+   * Poll the status of an enrichment job. Frontend calls this every couple
+   * of seconds while a job is in flight. Stops when status is 'completed'
+   * or 'failed'.
+   */
+  getEnrichJob: (name: string, jobId: number): Promise<EnrichJob> =>
+    request<EnrichJob>(
+      `/domains/${encodeURIComponent(name)}/enrich/${jobId}`
+    ),
 
   listSources: (): Promise<SourceListItem[]> => request<SourceListItem[]>('/sources'),
 };
