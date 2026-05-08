@@ -45,6 +45,7 @@ from enrichers.dns_records import DnsEnricher
 from enrichers.email_security import EmailSecurityEnricher
 from enrichers.whois_lookup import WhoisEnricher
 from enrichers.cert_transparency import CertTransparencyEnricher
+from enrichers.typo_squat import TypoSquatEnricher
 
 
 # Statuses we want to retry on. NOT_FOUND, RATE_LIMITED, OK are all terminal.
@@ -178,6 +179,11 @@ def run_ct_logs_task(self: Task, job_id: int, domain_id: int, domain_name: str) 
     return _run_enricher_task(self, CertTransparencyEnricher(), job_id, domain_id, domain_name)
 
 
+@app.task(bind=True, name="enrichment.typo_squat")
+def run_typo_squat_task(self: Task, job_id: int, domain_id: int, domain_name: str) -> dict:
+    return _run_enricher_task(self, TypoSquatEnricher(), job_id, domain_id, domain_name)
+
+
 # ----------------------------------------------------------------------------
 # Mapping that the API layer uses to dispatch the right tasks
 # ----------------------------------------------------------------------------
@@ -186,4 +192,5 @@ TASK_FOR_ENRICHMENT_TYPE: dict[EnrichmentType, Task] = {
     EnrichmentType.EMAIL_SECURITY: run_email_security_task,
     EnrichmentType.WHOIS: run_whois_task,
     EnrichmentType.CT_LOGS: run_ct_logs_task,
+    EnrichmentType.TYPO_SQUAT: run_typo_squat_task,
 }
