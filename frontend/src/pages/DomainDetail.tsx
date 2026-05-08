@@ -13,6 +13,7 @@ import {
   XCircle,
   Clock,
   Search,
+  Target,
 } from 'lucide-react';
 import {
   api,
@@ -21,6 +22,7 @@ import {
   type DnsData,
   type EmailSecurityData,
   type WhoisData,
+  type TypoSquatData,
   type EnrichJob,
 } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -528,6 +530,132 @@ function CertTransparencySection(props: { enrichment: Enrichment }) {
 }
 
 // ----------------------------------------------------------------------------
+// Typo-squat section
+// ----------------------------------------------------------------------------
+function TypoSquatSection(props: { enrichment: Enrichment }) {
+  const [showAll, setShowAll] = useState(false);
+  const data = props.enrichment.data as TypoSquatData;
+
+  if (props.enrichment.status !== 'ok') {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Target className="h-4 w-4 text-muted-foreground" />
+            Typo-squat lookalikes
+            <StatusIcon status={props.enrichment.status} />
+            <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+              {props.enrichment.status}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          {props.enrichment.error_message ||
+            'Typo-squat scan did not complete. Re-enrich to retry.'}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const alive = data.alive || [];
+  const visible = showAll ? alive : alive.slice(0, 10);
+  const hasMore = alive.length > 10;
+  const truncated = data.permutations_generated >= data.cap_applied;
+
+  // Group alive results by fuzzer type for the small summary line.
+  const byFuzzer = alive.reduce<Record<string, number>>((acc, a) => {
+    acc[a.fuzzer] = (acc[a.fuzzer] || 0) + 1;
+    return acc;
+  }, {});
+  const fuzzerSummary = Object.entries(byFuzzer)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => `${name} (${count})`)
+    .join(' · ');
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Target className="h-4 w-4 text-muted-foreground" />
+          Typo-squat lookalikes
+          <StatusIcon status={props.enrichment.status} />
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            {data.alive_count} alive · {data.permutations_attempted} of{' '}
+            {data.permutations_generated}
+            {truncated && '+'} resolved
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 pt-0 text-sm">
+        {alive.length === 0 ? (
+          <div className="text-muted-foreground">
+            No typo-squat lookalikes resolved. dnstwist generated{' '}
+            {data.permutations_generated} permutations
+            {truncated && ` (capped at ${data.cap_applied})`}; none had live A
+            records.
+          </div>
+        ) : (
+          <>
+            {fuzzerSummary && (
+              <div className="text-xs text-muted-foreground">
+                Techniques observed: {fuzzerSummary}
+              </div>
+            )}
+            <div className="space-y-1">
+              {visible.map((sub, idx) => (
+                <div
+                  key={idx}
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-border/30 pb-1 last:border-0 last:pb-0"
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="break-all font-mono text-xs">
+                      {sub.domain}
+                    </span>
+                    <Badge className="shrink-0 bg-muted/50 text-muted-foreground border-border text-xs">
+                      {sub.fuzzer}
+                    </Badge>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 font-mono text-xs text-muted-foreground">
+                    {sub.a_records.slice(0, 2).join(', ')}
+                    {sub.a_records.length > 2 &&
+                      ` +${sub.a_records.length - 2}`}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {hasMore && (
+              <button
+                onClick={() => setShowAll(!showAll)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                {showAll
+                  ? 'Show less'
+                  : `Show all ${alive.length} alive lookalikes`}
+              </button>
+            )}
+
+            {truncated && (
+              <div className="rounded border border-border/50 bg-muted/30 p-2 text-xs text-muted-foreground">
+                Hit the {data.cap_applied}-permutation cap. Some lookalikes may
+                not have been checked. The cap protects against dnstwist
+                producing thousands of homoglyph variations on long domains.
+              </div>
+            )}
+          </>
+        )}
+
+        <div className="text-xs text-muted-foreground">
+          A live A-record alone is not proof of malicious intent. Many
+          lookalikes are parked or owned defensively. Investigate individual
+          lookalikes by searching them in ReconMesh.
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Main page component
 // ----------------------------------------------------------------------------
 export function DomainDetail() {
@@ -643,6 +771,9 @@ export function DomainDetail() {
   );
   const whoisEnrichment = data.enrichments.find((e) => e.enrichment_type === 'whois');
   const ctEnrichment = data.enrichments.find((e) => e.enrichment_type === 'ct_logs');
+  const typoSquatEnrichment = data.enrichments.find(
+    (e) => e.enrichment_type === 'typo_squat'
+  );
 
   return (
     <div>
@@ -750,6 +881,11 @@ export function DomainDetail() {
           {ctEnrichment && (
             <div className="lg:col-span-2">
               <CertTransparencySection enrichment={ctEnrichment} />
+            </div>
+          )}
+          {typoSquatEnrichment && (
+            <div className="lg:col-span-2">
+              <TypoSquatSection enrichment={typoSquatEnrichment} />
             </div>
           )}
         </div>

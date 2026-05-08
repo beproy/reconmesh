@@ -130,10 +130,25 @@ export interface WhoisData {
   dnssec: string | null;
 }
 
+export interface TypoSquatAlive {
+  domain: string;
+  fuzzer: string;
+  a_records: string[];
+}
+
+export interface TypoSquatData {
+  permutations_generated: number;
+  permutations_attempted: number;
+  alive_count: number;
+  alive: TypoSquatAlive[];
+  cap_applied: number;
+  budget_seconds: number;
+}
+
 export interface Enrichment {
   enrichment_type: string;
   status: EnrichmentStatus;
-  data: DnsData | EmailSecurityData | WhoisData | Record<string, unknown>;
+  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | Record<string, unknown>;
   error_message: string | null;
   fetched_at: string;
 }
