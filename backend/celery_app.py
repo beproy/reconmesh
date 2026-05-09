@@ -64,6 +64,9 @@ app.conf.update(
     timezone="UTC",
     enable_utc=True,
 
+    # Silence Celery 6.0 deprecation warning about broker retry on startup
+    broker_connection_retry_on_startup=True,
+
     # Don't keep task results in Redis forever. 1 hour is plenty for the UI
     # to poll once and then forget.
     result_expires=3600,
