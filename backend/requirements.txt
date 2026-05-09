@@ -13,3 +13,4 @@ dnspython==2.7.0
 python-whois==0.9.5
 celery[redis]==5.4.0
 dnstwist==20250130
+pytest==8.3.4
