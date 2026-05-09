@@ -419,3 +419,42 @@ def refresh_urlhaus(db: Session = Depends(get_db)):
         skipped=stats.skipped,
         errors=stats.errors,
     )
+
+@app.post(
+    "/feeds/threatfox/refresh",
+    response_model=IngestStatsOut,
+    summary="Pull fresh domain IOCs from ThreatFox",
+)
+def refresh_threatfox(db: Session = Depends(get_db)):
+    from ingesters.threatfox import ThreatFoxIngester
+    ingester = ThreatFoxIngester()
+    stats = ingester.ingest(db)
+    return IngestStatsOut(
+        feed="ThreatFox",
+        fetched_bytes=stats.fetched,
+        parsed=stats.parsed,
+        inserted=stats.inserted,
+        updated=stats.updated,
+        skipped=stats.skipped,
+        errors=stats.errors,
+    )
+
+
+@app.post(
+    "/feeds/ransomware-live/refresh",
+    response_model=IngestStatsOut,
+    summary="Pull recent ransomware victims from ransomware.live",
+)
+def refresh_ransomware_live(db: Session = Depends(get_db)):
+    from ingesters.ransomware_live import RansomwareLiveIngester
+    ingester = RansomwareLiveIngester()
+    stats = ingester.ingest(db)
+    return IngestStatsOut(
+        feed="Ransomware.live",
+        fetched_bytes=stats.fetched,
+        parsed=stats.parsed,
+        inserted=stats.inserted,
+        updated=stats.updated,
+        skipped=stats.skipped,
+        errors=stats.errors,
+    )
