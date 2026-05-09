@@ -181,6 +181,17 @@ export interface EnrichJob {
 // ----------------------------------------------------------------------------
 // Domain types
 // ----------------------------------------------------------------------------
+export interface DomainListItem {
+  id: number;
+  name: string;
+  tld: string | null;
+  risk_score: number | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  indicator_count: number;
+  enrichment_count: number;
+}
+
 export interface Domain {
   id: number;
   name: string;
@@ -220,7 +231,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
+
 export const api = {
+  listDomains: (params: Record<string, string>): Promise<DomainListItem[]> => {
+    const qs = new URLSearchParams(params).toString();
+    return request<DomainListItem[]>(`/domains?${qs}`);
+  },
+
   getDomain: (name: string): Promise<Domain> =>
     request<Domain>(`/domains/${encodeURIComponent(name)}`),
 

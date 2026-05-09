@@ -90,6 +90,29 @@ class EnrichJobStatusOut(BaseModel):
 # ----------------------------------------------------------------------------
 # Domain schemas
 # ----------------------------------------------------------------------------
+class DomainListItem(BaseModel):
+    """Lightweight domain summary for the browse/list view."""
+    id: int
+    name: str
+    tld: Optional[str] = None
+    risk_score: Optional[int] = None
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    indicator_count: int = 0
+    enrichment_count: int = 0
+
+class DomainListItem(BaseModel):
+    """Lightweight domain summary for the browse/list view."""
+    id: int
+    name: str
+    tld: Optional[str] = None
+    risk_score: Optional[int] = None
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    indicator_count: int = 0
+    enrichment_count: int = 0
+
+    
 class DomainCreate(BaseModel):
     """What the client sends to create a new domain row."""
     name: str = Field(..., min_length=1, max_length=255, examples=["acmecorp.com"])

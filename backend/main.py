@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, joinedload
 from database import SessionLocal, engine, get_db
 from models import (
     Domain,
+    Enrichment,
     EnrichmentJob,
     EnrichmentJobStatus,
     EnrichmentType,
@@ -33,6 +34,7 @@ from models import (
 )
 from schemas import (
     DomainCreate,
+    DomainListItem,
     DomainOut,
     EnrichJobDispatchedOut,
     EnrichJobStatusOut,
@@ -113,6 +115,84 @@ def health():
 # ----------------------------------------------------------------------------
 # Domain endpoints
 # ----------------------------------------------------------------------------
+@app.get(
+    "/domains",
+    response_model=list[DomainListItem],
+    summary="Browse all domains with filtering and sorting",
+)
+def list_domains(
+    search: Optional[str] = None,
+    tld: Optional[str] = None,
+    has_indicators: Optional[bool] = None,
+    has_enrichments: Optional[bool] = None,
+    sort_by: str = "name",
+    sort_dir: str = "asc",
+    page: int = 1,
+    page_size: int = 25,
+    db: Session = Depends(get_db),
+):
+    """
+    Paginated domain listing with optional filters and sorting.
+    Used by the home page browse view.
+    """
+    query = (
+        db.query(
+            Domain,
+            func.count(func.distinct(Indicator.id)).label("indicator_count"),
+            func.count(func.distinct(Enrichment.id)).label("enrichment_count"),
+        )
+        .outerjoin(Indicator, Indicator.domain_id == Domain.id)
+        .outerjoin(Enrichment, Enrichment.domain_id == Domain.id)
+        .group_by(Domain.id)
+    )
+
+    if search:
+        query = query.filter(Domain.name.ilike(f"%{search.strip().lower()}%"))
+    if tld:
+        query = query.filter(Domain.tld == tld.strip().lower())
+    if has_indicators is True:
+        query = query.having(func.count(func.distinct(Indicator.id)) > 0)
+    elif has_indicators is False:
+        query = query.having(func.count(func.distinct(Indicator.id)) == 0)
+    if has_enrichments is True:
+        query = query.having(func.count(func.distinct(Enrichment.id)) > 0)
+    elif has_enrichments is False:
+        query = query.having(func.count(func.distinct(Enrichment.id)) == 0)
+
+    sort_columns = {
+        "name": Domain.name,
+        "tld": Domain.tld,
+        "first_seen": Domain.first_seen,
+        "last_seen": Domain.last_seen,
+        "risk_score": Domain.risk_score,
+        "indicator_count": func.count(func.distinct(Indicator.id)),
+        "enrichment_count": func.count(func.distinct(Enrichment.id)),
+    }
+    sort_col = sort_columns.get(sort_by, Domain.name)
+    if sort_dir.lower() == "desc":
+        sort_col = sort_col.desc()
+    else:
+        sort_col = sort_col.asc()
+    query = query.order_by(sort_col)
+
+    offset = (max(page, 1) - 1) * page_size
+    rows = query.offset(offset).limit(page_size).all()
+
+    return [
+        DomainListItem(
+            id=domain.id,
+            name=domain.name,
+            tld=domain.tld,
+            risk_score=domain.risk_score,
+            first_seen=domain.first_seen,
+            last_seen=domain.last_seen,
+            indicator_count=ind_count,
+            enrichment_count=enr_count,
+        )
+        for domain, ind_count, enr_count in rows
+    ]
+
+
 @app.post(
     "/domains",
     response_model=DomainOut,
