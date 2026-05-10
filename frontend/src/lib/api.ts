@@ -145,10 +145,27 @@ export interface TypoSquatData {
   budget_seconds: number;
 }
 
+export interface VirusTotalData {
+  verdict: 'clean' | 'malicious' | 'suspicious' | 'unknown';
+  analysis_stats: {
+    malicious: number;
+    suspicious: number;
+    harmless: number;
+    undetected: number;
+    total: number;
+  };
+  reputation: number;
+  categories: string[];
+  popularity_ranks: Record<string, number>;
+  jarm: string | null;
+  creation_date: number | null;
+  last_analysis_date: number | null;
+}
+
 export interface Enrichment {
   enrichment_type: string;
   status: EnrichmentStatus;
-  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | Record<string, unknown>;
+  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | VirusTotalData | Record<string, unknown>;
   error_message: string | null;
   fetched_at: string;
 }

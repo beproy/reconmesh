@@ -14,6 +14,7 @@ import {
   Clock,
   Search,
   Target,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   api,
@@ -23,6 +24,7 @@ import {
   type EmailSecurityData,
   type WhoisData,
   type TypoSquatData,
+  type VirusTotalData,
   type EnrichJob,
 } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -434,7 +436,7 @@ function WhoisSection(props: { enrichment: Enrichment }) {
 // ----------------------------------------------------------------------------
 function CertTransparencySection(props: { enrichment: Enrichment }) {
   const [showAll, setShowAll] = useState(false);
-  const data = props.enrichment.data as CtData;
+  const data = props.enrichment.data as unknown as CtData;
 
   if (props.enrichment.status !== 'ok') {
     return (
@@ -656,6 +658,119 @@ function TypoSquatSection(props: { enrichment: Enrichment }) {
 }
 
 // ----------------------------------------------------------------------------
+// VirusTotal section
+// ----------------------------------------------------------------------------
+function VirusTotalSection(props: { enrichment: Enrichment }) {
+  const data = props.enrichment.data as VirusTotalData;
+
+  if (props.enrichment.status !== 'ok') {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            VirusTotal
+            <StatusIcon status={props.enrichment.status} />
+            <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+              {props.enrichment.status}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          {props.enrichment.error_message || 'VirusTotal lookup did not complete.'}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const stats = data.analysis_stats || { malicious: 0, suspicious: 0, harmless: 0, undetected: 0, total: 0 };
+  const verdictColor =
+    data.verdict === 'malicious'
+      ? 'bg-red-500/20 text-red-300 border-red-500/40'
+      : data.verdict === 'suspicious'
+      ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+      : data.verdict === 'clean'
+      ? 'bg-green-500/20 text-green-300 border-green-500/40'
+      : 'bg-muted text-muted-foreground border-border';
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          VirusTotal
+          <StatusIcon status={props.enrichment.status} />
+          <span className="ml-auto">
+            <Badge className={verdictColor}>
+              {data.verdict} · {stats.malicious}/{stats.total} detections
+            </Badge>
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-0 text-sm">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Malicious</div>
+            <div className="text-lg font-semibold text-red-400">{stats.malicious}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Suspicious</div>
+            <div className="text-lg font-semibold text-yellow-400">{stats.suspicious}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Harmless</div>
+            <div className="text-lg font-semibold text-green-400">{stats.harmless}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Undetected</div>
+            <div className="text-lg font-semibold text-muted-foreground">{stats.undetected}</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Reputation score</div>
+            <div className="font-mono text-foreground">{data.reputation}</div>
+          </div>
+          {data.jarm && (
+            <div>
+              <div className="text-xs uppercase text-muted-foreground">JARM fingerprint</div>
+              <div className="break-all font-mono text-xs text-foreground">{data.jarm}</div>
+            </div>
+          )}
+        </div>
+
+        {data.categories && data.categories.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs uppercase text-muted-foreground">Categories</div>
+            <div className="flex flex-wrap gap-1">
+              {data.categories.map((cat, idx) => (
+                <Badge key={idx} className="bg-muted/50 text-muted-foreground border-border text-xs">
+                  {cat}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {data.popularity_ranks && Object.keys(data.popularity_ranks).length > 0 && (
+          <div>
+            <div className="mb-1 text-xs uppercase text-muted-foreground">Popularity ranks</div>
+            <div className="flex flex-wrap gap-3 text-xs">
+              {Object.entries(data.popularity_ranks).map(([source, rank]) => (
+                <span key={source} className="text-muted-foreground">
+                  {source}: <span className="font-mono text-foreground">#{rank}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Main page component
 // ----------------------------------------------------------------------------
 export function DomainDetail() {
@@ -774,6 +889,9 @@ export function DomainDetail() {
   const typoSquatEnrichment = data.enrichments.find(
     (e) => e.enrichment_type === 'typo_squat'
   );
+  const vtEnrichment = data.enrichments.find(
+    (e) => e.enrichment_type === 'virustotal'
+  );
 
   return (
     <div>
@@ -886,6 +1004,11 @@ export function DomainDetail() {
           {typoSquatEnrichment && (
             <div className="lg:col-span-2">
               <TypoSquatSection enrichment={typoSquatEnrichment} />
+            </div>
+          )}
+          {vtEnrichment && (
+            <div className="lg:col-span-2">
+              <VirusTotalSection enrichment={vtEnrichment} />
             </div>
           )}
         </div>
