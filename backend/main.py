@@ -458,3 +458,23 @@ def refresh_ransomware_live(db: Session = Depends(get_db)):
         skipped=stats.skipped,
         errors=stats.errors,
     )
+
+
+@app.post(
+    "/feeds/otx/refresh",
+    response_model=IngestStatsOut,
+    summary="Pull domain IOCs from AlienVault OTX pulse subscriptions",
+)
+def refresh_otx(db: Session = Depends(get_db)):
+    from ingesters.otx import OtxIngester
+    ingester = OtxIngester()
+    stats = ingester.ingest(db)
+    return IngestStatsOut(
+        feed="OTX",
+        fetched_bytes=stats.fetched,
+        parsed=stats.parsed,
+        inserted=stats.inserted,
+        updated=stats.updated,
+        skipped=stats.skipped,
+        errors=stats.errors,
+    )
