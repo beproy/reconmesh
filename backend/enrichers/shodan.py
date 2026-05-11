@@ -1,17 +1,20 @@
 """
-Shodan domain enricher (BYOK).
+Shodan domain enricher (BYOK — free tier compatible).
 
-Resolves the domain's A record, then queries Shodan's host API to get:
-  - Open ports and services (banners)
-  - Operating system detection
-  - Organization / ISP
-  - Known vulnerabilities (CVEs)
-  - Country / city geolocation
+Uses the Shodan free tier endpoints to provide basic infrastructure intel:
+  - DNS resolution (domain -> IP)
+  - Host count (how many scan results Shodan has for that IP)
 
-Requires SHODAN_API_KEY environment variable. Free tier allows limited
-queries but sufficient for single-domain enrichment.
+The full host details (open ports, services, vulns, OS) require a Shodan
+membership ($59 one-time). If the API key has membership access, this
+enricher will automatically use the full host endpoint instead.
 
-Flow: domain -> DNS A record -> Shodan /shodan/host/{ip}
+Flow:
+  1. Resolve domain via Shodan DNS API
+  2. Try full host endpoint (works on paid tier)
+  3. If 403, fall back to host count (works on free tier)
+
+Requires SHODAN_API_KEY environment variable.
 """
 from __future__ import annotations
 
@@ -19,8 +22,6 @@ import logging
 import os
 from typing import Optional
 
-import dns.resolver
-import dns.exception
 import httpx
 
 from enrichers.base import BaseEnricher, EnrichmentResult
@@ -31,7 +32,6 @@ log = logging.getLogger(__name__)
 
 SHODAN_API_BASE = "https://api.shodan.io"
 HTTP_TIMEOUT_SECONDS = 15
-DNS_TIMEOUT_SECONDS = 5
 
 
 class ShodanEnricher(BaseEnricher):
@@ -42,25 +42,6 @@ class ShodanEnricher(BaseEnricher):
     def __init__(self) -> None:
         self._api_key = os.environ.get("SHODAN_API_KEY", "")
 
-    def _resolve_a_record(self, domain_name: str) -> Optional[str]:
-        """Resolve domain to its first A record IP."""
-        try:
-            resolver = dns.resolver.Resolver()
-            resolver.timeout = DNS_TIMEOUT_SECONDS
-            resolver.lifetime = DNS_TIMEOUT_SECONDS
-            answer = resolver.resolve(domain_name, "A")
-            for rdata in answer:
-                return rdata.address
-        except (
-            dns.resolver.NXDOMAIN,
-            dns.resolver.NoAnswer,
-            dns.resolver.NoNameservers,
-            dns.exception.Timeout,
-            dns.exception.DNSException,
-        ):
-            return None
-        return None
-
     def enrich(self, domain_name: str) -> EnrichmentResult:
         if not self._api_key:
             return EnrichmentResult(
@@ -70,17 +51,51 @@ class ShodanEnricher(BaseEnricher):
                 error_message="SHODAN_API_KEY not set. Add it to .env and restart.",
             )
 
-        # Step 1: Resolve domain to IP
-        ip = self._resolve_a_record(domain_name)
+        # Step 1: Resolve domain via Shodan's DNS API
+        ip = self._resolve_via_shodan(domain_name)
         if not ip:
             return EnrichmentResult(
                 enrichment_type=EnrichmentType.SHODAN,
                 status=EnrichmentStatus.NOT_FOUND,
                 data={"reason": "domain_did_not_resolve"},
-                error_message=f"Could not resolve A record for {domain_name}",
+                error_message=f"Could not resolve {domain_name} via Shodan DNS",
             )
 
-        # Step 2: Query Shodan host API
+        # Step 2: Try full host endpoint first (paid tier)
+        full_result = self._try_full_host(ip)
+        if full_result is not None:
+            return full_result
+
+        # Step 3: Fall back to host count (free tier)
+        return self._host_count_fallback(ip, domain_name)
+
+    # ------------------------------------------------------------------
+    # Shodan DNS resolution
+    # ------------------------------------------------------------------
+    def _resolve_via_shodan(self, domain_name: str) -> Optional[str]:
+        """Resolve domain to IP using Shodan's DNS endpoint."""
+        try:
+            with httpx.Client(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                r = client.get(
+                    f"{SHODAN_API_BASE}/dns/resolve",
+                    params={"hostnames": domain_name, "key": self._api_key},
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    return data.get(domain_name)
+        except Exception as exc:
+            log.warning("Shodan DNS resolve failed: %s", exc)
+        return None
+
+    # ------------------------------------------------------------------
+    # Full host endpoint (paid tier)
+    # ------------------------------------------------------------------
+    def _try_full_host(self, ip: str) -> Optional[EnrichmentResult]:
+        """
+        Try the full /shodan/host/{ip} endpoint. Returns None if the
+        endpoint is blocked (403 = free tier), letting the caller fall
+        back to the count endpoint.
+        """
         try:
             with httpx.Client(timeout=HTTP_TIMEOUT_SECONDS) as client:
                 response = client.get(
@@ -102,20 +117,16 @@ class ShodanEnricher(BaseEnricher):
                 error_message=f"HTTP error: {exc}",
             )
 
+        # 403 = free tier, fall back to count
+        if response.status_code == 403:
+            return None
+
         if response.status_code == 404:
             return EnrichmentResult(
                 enrichment_type=EnrichmentType.SHODAN,
                 status=EnrichmentStatus.NOT_FOUND,
-                data={"ip": ip},
+                data={"ip": ip, "tier": "paid"},
                 error_message=f"IP {ip} not found in Shodan",
-            )
-
-        if response.status_code == 401:
-            return EnrichmentResult(
-                enrichment_type=EnrichmentType.SHODAN,
-                status=EnrichmentStatus.ERROR,
-                data={"ip": ip},
-                error_message="Shodan API key is invalid",
             )
 
         if response.status_code == 429:
@@ -144,20 +155,11 @@ class ShodanEnricher(BaseEnricher):
                 error_message=f"Failed to parse Shodan response: {exc}",
             )
 
-        # Extract key fields
+        # Full host data available (paid tier)
         ports = sorted(body.get("ports", []))
         vulns = sorted(body.get("vulns", []))
-        os_name = body.get("os")
-        org = body.get("org")
-        isp = body.get("isp")
-        country = body.get("country_name")
-        city = body.get("city")
-        asn = body.get("asn")
-        last_update = body.get("last_update")
-
-        # Extract service summaries from the data array
         services = []
-        for item in body.get("data", [])[:20]:  # Cap at 20 services
+        for item in body.get("data", [])[:20]:
             svc = {
                 "port": item.get("port"),
                 "transport": item.get("transport", "tcp"),
@@ -165,27 +167,90 @@ class ShodanEnricher(BaseEnricher):
                 "version": item.get("version"),
                 "module": item.get("_shodan", {}).get("module"),
             }
-            # Clean out None values
             services.append({k: v for k, v in svc.items() if v is not None})
-
-        data = {
-            "ip": ip,
-            "ports": ports,
-            "ports_count": len(ports),
-            "vulns": vulns,
-            "vulns_count": len(vulns),
-            "os": os_name,
-            "org": org,
-            "isp": isp,
-            "asn": asn,
-            "country": country,
-            "city": city,
-            "services": services,
-            "last_update": last_update,
-        }
 
         return EnrichmentResult(
             enrichment_type=EnrichmentType.SHODAN,
             status=EnrichmentStatus.OK,
-            data=data,
+            data={
+                "ip": ip,
+                "tier": "paid",
+                "ports": ports,
+                "ports_count": len(ports),
+                "vulns": vulns,
+                "vulns_count": len(vulns),
+                "os": body.get("os"),
+                "org": body.get("org"),
+                "isp": body.get("isp"),
+                "asn": body.get("asn"),
+                "country": body.get("country_name"),
+                "city": body.get("city"),
+                "services": services,
+                "last_update": body.get("last_update"),
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Host count fallback (free tier)
+    # ------------------------------------------------------------------
+    def _host_count_fallback(
+        self, ip: str, domain_name: str
+    ) -> EnrichmentResult:
+        """
+        Use /shodan/host/count to check if Shodan has scanned this IP.
+        Available on the free (oss) tier.
+        """
+        try:
+            with httpx.Client(timeout=HTTP_TIMEOUT_SECONDS) as client:
+                r = client.get(
+                    f"{SHODAN_API_BASE}/shodan/host/count",
+                    params={"query": f"ip:{ip}", "key": self._api_key},
+                )
+        except httpx.TimeoutException:
+            return EnrichmentResult(
+                enrichment_type=EnrichmentType.SHODAN,
+                status=EnrichmentStatus.TIMEOUT,
+                data={"ip": ip},
+                error_message="Shodan host count timed out",
+            )
+        except httpx.HTTPError as exc:
+            return EnrichmentResult(
+                enrichment_type=EnrichmentType.SHODAN,
+                status=EnrichmentStatus.ERROR,
+                data={"ip": ip},
+                error_message=f"HTTP error on host count: {exc}",
+            )
+
+        if r.status_code != 200:
+            return EnrichmentResult(
+                enrichment_type=EnrichmentType.SHODAN,
+                status=EnrichmentStatus.ERROR,
+                data={"ip": ip},
+                error_message=f"Shodan host count returned HTTP {r.status_code}",
+            )
+
+        try:
+            body = r.json()
+        except Exception:
+            body = {}
+
+        total = body.get("total", 0)
+        seen_by_shodan = total > 0
+
+        return EnrichmentResult(
+            enrichment_type=EnrichmentType.SHODAN,
+            status=EnrichmentStatus.OK,
+            data={
+                "ip": ip,
+                "tier": "free",
+                "seen_by_shodan": seen_by_shodan,
+                "scan_results_count": total,
+                "note": (
+                    f"Shodan has {total} scan result(s) for {ip}. "
+                    "Full port/service/vulnerability details require a "
+                    "Shodan membership (shodan.io/store/member)."
+                    if seen_by_shodan
+                    else f"IP {ip} has not been observed by Shodan scanners."
+                ),
+            },
         )

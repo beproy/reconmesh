@@ -800,6 +800,52 @@ function ShodanSection(props: { enrichment: Enrichment }) {
     );
   }
 
+  const isFree = (data as any).tier === 'free';
+
+  if (isFree) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Radar className="h-4 w-4 text-muted-foreground" />
+            Shodan
+            <StatusIcon status={props.enrichment.status} />
+            <span className="ml-auto text-xs font-normal text-muted-foreground">
+              free tier
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 pt-0 text-sm">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs uppercase text-muted-foreground">Resolved IP</div>
+              <div className="font-mono text-foreground">{data.ip}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase text-muted-foreground">Shodan scan results</div>
+              <div className="text-foreground">
+                {(data as any).seen_by_shodan
+                  ? <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/40 text-xs">
+                      {(data as any).scan_results_count} result(s) found
+                    </Badge>
+                  : <Badge className="bg-muted text-muted-foreground border-border text-xs">
+                      Not observed
+                    </Badge>
+                }
+              </div>
+            </div>
+          </div>
+          {(data as any).note && (
+            <div className="rounded border border-border/50 bg-muted/30 p-2 text-xs text-muted-foreground">
+              {(data as any).note}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Paid tier — full data
   return (
     <Card>
       <CardHeader className="pb-3">
