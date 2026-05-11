@@ -162,10 +162,42 @@ export interface VirusTotalData {
   last_analysis_date: number | null;
 }
 
+export interface ShodanData {
+  ip: string;
+  ports: number[];
+  ports_count: number;
+  vulns: string[];
+  vulns_count: number;
+  os: string | null;
+  org: string | null;
+  isp: string | null;
+  asn: string | null;
+  country: string | null;
+  city: string | null;
+  services: Array<{ port: number; transport?: string; product?: string; version?: string; module?: string }>;
+  last_update: string | null;
+}
+
+export interface AbuseIPDBData {
+  ip: string;
+  abuse_confidence_score: number;
+  threat_level: 'high' | 'medium' | 'low' | 'none';
+  total_reports: number;
+  distinct_reporters: number;
+  country_code: string | null;
+  country_name: string | null;
+  isp: string | null;
+  usage_type: string | null;
+  domain: string | null;
+  is_tor: boolean;
+  is_whitelisted: boolean;
+  last_reported_at: string | null;
+}
+
 export interface Enrichment {
   enrichment_type: string;
   status: EnrichmentStatus;
-  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | VirusTotalData | Record<string, unknown>;
+  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | VirusTotalData | ShodanData | AbuseIPDBData | Record<string, unknown>;
   error_message: string | null;
   fetched_at: string;
 }

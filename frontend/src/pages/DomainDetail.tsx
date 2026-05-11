@@ -15,6 +15,8 @@ import {
   Search,
   Target,
   ShieldCheck,
+  Radar,
+  AlertOctagon,
 } from 'lucide-react';
 import {
   api,
@@ -25,6 +27,8 @@ import {
   type WhoisData,
   type TypoSquatData,
   type VirusTotalData,
+  type ShodanData,
+  type AbuseIPDBData,
   type EnrichJob,
 } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -771,6 +775,220 @@ function VirusTotalSection(props: { enrichment: Enrichment }) {
 }
 
 // ----------------------------------------------------------------------------
+// Shodan section
+// ----------------------------------------------------------------------------
+function ShodanSection(props: { enrichment: Enrichment }) {
+  const data = props.enrichment.data as unknown as ShodanData;
+
+  if (props.enrichment.status !== 'ok') {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Radar className="h-4 w-4 text-muted-foreground" />
+            Shodan
+            <StatusIcon status={props.enrichment.status} />
+            <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+              {props.enrichment.status}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          {props.enrichment.error_message || 'Shodan lookup did not complete.'}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Radar className="h-4 w-4 text-muted-foreground" />
+          Shodan
+          <StatusIcon status={props.enrichment.status} />
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            {data.ports_count} port{data.ports_count === 1 ? '' : 's'} · {data.vulns_count} vuln{data.vulns_count === 1 ? '' : 's'}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-0 text-sm">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">IP</div>
+            <div className="font-mono text-foreground">{data.ip}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Organization</div>
+            <div className="text-foreground">{data.org || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">ISP</div>
+            <div className="text-foreground">{data.isp || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">OS</div>
+            <div className="text-foreground">{data.os || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Country</div>
+            <div className="text-foreground">{data.country || '—'}{data.city ? `, ${data.city}` : ''}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">ASN</div>
+            <div className="font-mono text-foreground">{data.asn || '—'}</div>
+          </div>
+        </div>
+
+        {data.ports && data.ports.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs uppercase text-muted-foreground">Open ports</div>
+            <div className="flex flex-wrap gap-1">
+              {data.ports.map((port) => (
+                <Badge key={port} className="bg-muted/50 text-muted-foreground border-border font-mono text-xs">
+                  {port}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {data.vulns && data.vulns.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs uppercase text-muted-foreground">Vulnerabilities</div>
+            <div className="flex flex-wrap gap-1">
+              {data.vulns.map((cve) => (
+                <Badge key={cve} className="bg-red-500/20 text-red-300 border-red-500/40 font-mono text-xs">
+                  {cve}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {data.services && data.services.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs uppercase text-muted-foreground">Services ({data.services.length})</div>
+            <div className="space-y-1">
+              {data.services.slice(0, 10).map((svc, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-xs">
+                  <Badge className="bg-muted/50 text-muted-foreground border-border font-mono">
+                    {svc.port}/{svc.transport || 'tcp'}
+                  </Badge>
+                  <span className="text-foreground">
+                    {svc.product || svc.module || '—'}
+                    {svc.version ? ` ${svc.version}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// AbuseIPDB section
+// ----------------------------------------------------------------------------
+function AbuseIPDBSection(props: { enrichment: Enrichment }) {
+  const data = props.enrichment.data as unknown as AbuseIPDBData;
+
+  if (props.enrichment.status !== 'ok') {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AlertOctagon className="h-4 w-4 text-muted-foreground" />
+            AbuseIPDB
+            <StatusIcon status={props.enrichment.status} />
+            <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+              {props.enrichment.status}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          {props.enrichment.error_message || 'AbuseIPDB lookup did not complete.'}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const scoreColor =
+    data.threat_level === 'high'
+      ? 'bg-red-500/20 text-red-300 border-red-500/40'
+      : data.threat_level === 'medium'
+      ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+      : data.threat_level === 'low'
+      ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
+      : 'bg-green-500/20 text-green-300 border-green-500/40';
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <AlertOctagon className="h-4 w-4 text-muted-foreground" />
+          AbuseIPDB
+          <StatusIcon status={props.enrichment.status} />
+          <span className="ml-auto">
+            <Badge className={scoreColor}>
+              {data.threat_level} · {data.abuse_confidence_score}% abuse confidence
+            </Badge>
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-0 text-sm">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">IP</div>
+            <div className="font-mono text-foreground">{data.ip}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Abuse score</div>
+            <div className="text-lg font-semibold text-foreground">{data.abuse_confidence_score}%</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Total reports</div>
+            <div className="text-foreground">{data.total_reports} ({data.distinct_reporters} reporters)</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">ISP</div>
+            <div className="text-foreground">{data.isp || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Country</div>
+            <div className="text-foreground">{data.country_name || data.country_code || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Usage type</div>
+            <div className="text-foreground">{data.usage_type || '—'}</div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {data.is_tor && (
+            <Badge className="bg-red-500/20 text-red-300 border-red-500/40 text-xs">
+              Tor exit node
+            </Badge>
+          )}
+          {data.is_whitelisted && (
+            <Badge className="bg-green-500/20 text-green-300 border-green-500/40 text-xs">
+              Whitelisted
+            </Badge>
+          )}
+          {data.last_reported_at && (
+            <span className="text-xs text-muted-foreground">
+              Last reported: {new Date(data.last_reported_at).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ----------------------------------------------------------------------------
 // Main page component
 // ----------------------------------------------------------------------------
 export function DomainDetail() {
@@ -892,6 +1110,12 @@ export function DomainDetail() {
   const vtEnrichment = data.enrichments.find(
     (e) => e.enrichment_type === 'virustotal'
   );
+  const shodanEnrichment = data.enrichments.find(
+    (e) => e.enrichment_type === 'shodan'
+  );
+  const abuseipdbEnrichment = data.enrichments.find(
+    (e) => e.enrichment_type === 'abuseipdb'
+  );
 
   return (
     <div>
@@ -1009,6 +1233,16 @@ export function DomainDetail() {
           {vtEnrichment && (
             <div className="lg:col-span-2">
               <VirusTotalSection enrichment={vtEnrichment} />
+            </div>
+          )}
+          {shodanEnrichment && (
+            <div className="lg:col-span-2">
+              <ShodanSection enrichment={shodanEnrichment} />
+            </div>
+          )}
+          {abuseipdbEnrichment && (
+            <div className="lg:col-span-2">
+              <AbuseIPDBSection enrichment={abuseipdbEnrichment} />
             </div>
           )}
         </div>

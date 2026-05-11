@@ -272,6 +272,8 @@ class EnrichmentType(str, PyEnum):
     CT_LOGS = "ct_logs"           # reserved for Session 7
     TYPO_SQUAT = "typo_squat"     # reserved for Session 7
     VIRUSTOTAL = "virustotal"
+    SHODAN = "shodan"
+    ABUSEIPDB = "abuseipdb"
 
 
 class EnrichmentStatus(str, PyEnum):

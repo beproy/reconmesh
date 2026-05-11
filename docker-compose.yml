@@ -54,6 +54,8 @@ services:
       REDIS_PORT: 6379
       OTX_API_KEY: ${OTX_API_KEY:-}
       VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
     ports:
       # Only the backend's HTTP port is exposed to your laptop
       # 127.0.0.1 means: only localhost can reach it, NOT other machines on your network
@@ -87,6 +89,8 @@ services:
       POSTGRES_PORT: ${POSTGRES_PORT}
       BACKEND_SECRET_KEY: ${BACKEND_SECRET_KEY}
       VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
     volumes:
