@@ -21,9 +21,12 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
+from pydantic import BaseModel
+from fastapi import Header
 
 from database import SessionLocal, engine, get_db
 from models import (
+    ApiKey,
     Domain,
     Enrichment,
     EnrichmentJob,
@@ -43,6 +46,7 @@ from schemas import (
 )
 from ingesters.urlhaus import UrlhausIngester
 from tasks.enrichment_tasks import TASK_FOR_ENRICHMENT_TYPE
+from auth import generate_api_key, hash_api_key, require_api_key
 
 
 # ----------------------------------------------------------------------------
@@ -259,7 +263,11 @@ def get_domain(domain_name: str, db: Session = Depends(get_db)):
     status_code=status.HTTP_202_ACCEPTED,
     summary="Dispatch async enrichment tasks for a domain",
 )
-def enrich_domain(domain_name: str, db: Session = Depends(get_db)):
+def enrich_domain(
+    domain_name: str,
+    db: Session = Depends(get_db),
+    api_key: ApiKey = Depends(require_api_key),
+):
     """
     Async enrichment. We:
       1. Find or create the domain row
@@ -477,4 +485,64 @@ def refresh_otx(db: Session = Depends(get_db)):
         updated=stats.updated,
         skipped=stats.skipped,
         errors=stats.errors,
+    )
+
+
+# ----------------------------------------------------------------------------
+# Admin: mint API keys (bootstrap-token protected)
+# ----------------------------------------------------------------------------
+# This is the ONLY way to create new API keys. It is protected by a single
+# server-side secret (ADMIN_BOOTSTRAP_TOKEN) read from the environment, NOT
+# by an API key itself — which would be a chicken-and-egg problem.
+#
+# The raw key is returned in the response body exactly once and is never
+# stored anywhere; only its SHA-256 hash is persisted. If lost, mint a new
+# one and revoke the old.
+
+class MintKeyRequest(BaseModel):
+    name: str
+
+
+class MintKeyResponse(BaseModel):
+    id: int
+    name: str
+    api_key: str  # raw key — shown ONCE, never recoverable
+    created_at: datetime
+
+
+def require_bootstrap_token(
+    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
+) -> None:
+    expected = os.getenv("ADMIN_BOOTSTRAP_TOKEN")
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ADMIN_BOOTSTRAP_TOKEN not configured on server",
+        )
+    if not x_admin_token or x_admin_token != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin token",
+        )
+
+
+@app.post(
+    "/admin/keys",
+    response_model=MintKeyResponse,
+    dependencies=[Depends(require_bootstrap_token)],
+    tags=["admin"],
+)
+def mint_api_key(req: MintKeyRequest, db: Session = Depends(get_db)):
+    """Mint a new API key. Bootstrap-token protected."""
+    raw_key = generate_api_key()
+    key_row = ApiKey(name=req.name, key_hash=hash_api_key(raw_key))
+    db.add(key_row)
+    db.commit()
+    db.refresh(key_row)
+
+    return MintKeyResponse(
+        id=key_row.id,
+        name=key_row.name,
+        api_key=raw_key,  # only time this is ever visible
+        created_at=key_row.created_at,
     )

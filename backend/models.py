@@ -382,3 +382,34 @@ class EnrichmentJob(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
     domain = relationship("Domain", back_populates="enrichment_jobs")
+
+
+# ----------------------------------------------------------------------------
+# ApiKey — header-based auth keys for protected endpoints (Session 18)
+# ----------------------------------------------------------------------------
+class ApiKey(Base):
+    """
+    An API key issued for accessing protected endpoints (currently /enrich).
+
+    We store only the SHA-256 hash of the key — the raw key is shown to the
+    user exactly once at mint time and is never recoverable after that.
+
+    Revocation is soft: setting `revoked_at` invalidates the key but keeps
+    the row for audit history. The key is active when `revoked_at IS NULL`.
+    """
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    key_hash = Column(String(64), nullable=False, unique=True, index=True)
+
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
