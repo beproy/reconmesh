@@ -74,3 +74,7 @@ seed_data/*
 !seed_data/README.md
 !seed_data/example.csv
 !seed_data/.gitkeep
+
+# Scratch debug probes (Claude session artifacts)
+ahmia_probe*.py
+*_probe.py
