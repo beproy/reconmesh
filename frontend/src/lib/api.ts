@@ -194,10 +194,29 @@ export interface AbuseIPDBData {
   last_reported_at: string | null;
 }
 
+export interface AhmiaMention {
+  onion_url: string;
+  onion_host: string;
+  title: string;
+  snippet: string;
+  cite: string;
+  last_seen: string;
+}
+ 
+export interface AhmiaData {
+  query: string;
+  mention_count: number;
+  unique_sites: number;
+  raw_result_count: number;
+  mentions: AhmiaMention[];
+  note: string;
+  source_url: string;
+}
+
 export interface Enrichment {
   enrichment_type: string;
   status: EnrichmentStatus;
-  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | VirusTotalData | ShodanData | AbuseIPDBData | Record<string, unknown>;
+  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | VirusTotalData | ShodanData | AbuseIPDBData | AhmiaData |  Record<string, unknown>;
   error_message: string | null;
   fetched_at: string;
 }

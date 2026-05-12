@@ -29,6 +29,7 @@ import {
   type VirusTotalData,
   type ShodanData,
   type AbuseIPDBData,
+  type AhmiaData,
   type EnrichJob,
 } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1034,6 +1035,129 @@ function AbuseIPDBSection(props: { enrichment: Enrichment }) {
   );
 }
 
+
+// ----------------------------------------------------------------------------
+// Ahmia (dark web mentions) section
+// ----------------------------------------------------------------------------
+function AhmiaSection(props: { enrichment: Enrichment }) {
+  const data = props.enrichment.data as unknown as AhmiaData;
+ 
+  if (props.enrichment.status !== 'ok') {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AlertOctagon className="h-4 w-4 text-muted-foreground" />
+            Dark Web Mentions
+            <StatusIcon status={props.enrichment.status} />
+            <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+              {props.enrichment.status}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          {props.enrichment.status === 'not_found'
+            ? `Ahmia returned no indexed onion services mentioning "${data?.query ?? ''}". Note: Ahmia filters certain query terms by policy.`
+            : props.enrichment.error_message || 'Ahmia lookup did not complete.'}
+        </CardContent>
+      </Card>
+    );
+  }
+ 
+  const severityBadge =
+    data.unique_sites >= 10
+      ? 'bg-red-500/20 text-red-300 border-red-500/40'
+      : data.unique_sites >= 3
+      ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
+      : data.unique_sites >= 1
+      ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
+      : 'bg-green-500/20 text-green-300 border-green-500/40';
+ 
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <AlertOctagon className="h-4 w-4 text-muted-foreground" />
+          Dark Web Mentions
+          <StatusIcon status={props.enrichment.status} />
+          <span className="ml-auto">
+            <Badge className={severityBadge}>
+              {data.unique_sites} site(s) · {data.raw_result_count} raw result(s)
+            </Badge>
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-0 text-sm">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Query</div>
+            <div className="font-mono text-foreground">{data.query}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Unique sites</div>
+            <div className="text-lg font-semibold text-foreground">{data.unique_sites}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Raw results</div>
+            <div className="text-foreground">{data.raw_result_count}</div>
+          </div>
+          <div>
+            <div className="text-xs uppercase text-muted-foreground">Source</div>
+            <div className="text-foreground">Ahmia</div>
+          </div>
+        </div>
+ 
+        {data.note && (
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            {data.note}
+          </div>
+        )}
+ 
+        {data.mentions && data.mentions.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs uppercase text-muted-foreground">
+              Mentions (top {data.mentions.length})
+            </div>
+            <div className="space-y-2">
+              {data.mentions.map((m, idx) => (
+                <div
+                  key={`${m.onion_host}-${idx}`}
+                  className="rounded-md border border-border bg-muted/20 p-3 space-y-1"
+                >
+                  <div className="flex items-start gap-2">
+                    <Badge className="bg-red-500/10 text-red-300 border-red-500/30 text-[10px] shrink-0">
+                      .onion
+                    </Badge>
+                    <div className="text-foreground font-medium leading-snug">
+                      {m.title || '(no title)'}
+                    </div>
+                  </div>
+                  {m.snippet && (
+                    <div className="text-xs text-muted-foreground leading-snug">
+                      {m.snippet}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground pt-1">
+                    <span className="font-mono break-all select-all">
+                      {m.onion_host}
+                    </span>
+                    {m.last_seen && (
+                      <span>Last seen: {m.last_seen}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="text-[11px] text-muted-foreground italic">
+              Onion addresses shown as plain text — do not visit. These may be
+              active illicit-marketplace infrastructure.
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 // ----------------------------------------------------------------------------
 // Main page component
 // ----------------------------------------------------------------------------
@@ -1162,6 +1286,9 @@ export function DomainDetail() {
   const abuseipdbEnrichment = data.enrichments.find(
     (e) => e.enrichment_type === 'abuseipdb'
   );
+  const ahmiaEnrichment = data.enrichments.find(
+    (e) => e.enrichment_type === 'ahmia'
+  );
 
   return (
     <div>
@@ -1289,6 +1416,11 @@ export function DomainDetail() {
           {abuseipdbEnrichment && (
             <div className="lg:col-span-2">
               <AbuseIPDBSection enrichment={abuseipdbEnrichment} />
+            </div>
+          )}
+          {ahmiaEnrichment && (
+            <div className="lg:col-span-2">
+              <AhmiaSection enrichment={ahmiaEnrichment} />
             </div>
           )}
         </div>
