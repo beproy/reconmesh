@@ -274,6 +274,7 @@ class EnrichmentType(str, PyEnum):
     VIRUSTOTAL = "virustotal"
     SHODAN = "shodan"
     ABUSEIPDB = "abuseipdb"
+    AHMIA = "ahmia"
 
 
 class EnrichmentStatus(str, PyEnum):

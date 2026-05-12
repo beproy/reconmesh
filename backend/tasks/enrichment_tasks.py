@@ -49,6 +49,7 @@ from enrichers.typo_squat import TypoSquatEnricher
 from enrichers.virustotal import VirusTotalEnricher
 from enrichers.shodan import ShodanEnricher
 from enrichers.abuseipdb import AbuseIPDBEnricher
+from enrichers.ahmia import AhmiaEnricher
 
 
 # Statuses we want to retry on. NOT_FOUND, RATE_LIMITED, OK are all terminal.
@@ -201,6 +202,10 @@ def run_shodan_task(self: Task, job_id: int, domain_id: int, domain_name: str) -
 def run_abuseipdb_task(self: Task, job_id: int, domain_id: int, domain_name: str) -> dict:
     return _run_enricher_task(self, AbuseIPDBEnricher(), job_id, domain_id, domain_name)
 
+@app.task(bind=True, name="enrichment.ahmia")
+def run_ahmia_task(self: Task, job_id: int, domain_id: int, domain_name: str) -> dict:
+    return _run_enricher_task(self, AhmiaEnricher(), job_id, domain_id, domain_name)
+
 # ----------------------------------------------------------------------------
 # Mapping that the API layer uses to dispatch the right tasks
 # ----------------------------------------------------------------------------
@@ -213,4 +218,5 @@ TASK_FOR_ENRICHMENT_TYPE: dict[EnrichmentType, Task] = {
     EnrichmentType.VIRUSTOTAL: run_virustotal_task,
     EnrichmentType.SHODAN: run_shodan_task,
     EnrichmentType.ABUSEIPDB: run_abuseipdb_task,
+    EnrichmentType.AHMIA: run_ahmia_task,
 }
