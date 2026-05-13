@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Shield } from 'lucide-react';
+import { SettingsDialog } from '@/components/SettingsDialog';
 
 export function Header() {
   return (
@@ -18,6 +19,7 @@ export function Header() {
           >
             Sources
           </Link>
+          <SettingsDialog />
         </nav>
       </div>
     </header>

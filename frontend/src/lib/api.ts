@@ -4,7 +4,11 @@
  * All calls go through the Vite dev-proxy: /api/* on the browser side
  * is forwarded to backend:8000 inside Docker. In production we'll point
  * at a real origin; the surface area here doesn't change.
+ *
+ * Session 19.5: requests automatically attach the X-API-Key header when
+ * one is stored in localStorage (managed by the Settings dialog).
  */
+import { getApiKey } from './apiKey';
 
 // ----------------------------------------------------------------------------
 // Error type
@@ -275,11 +279,25 @@ export interface Domain {
 
 // ----------------------------------------------------------------------------
 // Fetch helper
+//
+// Session 19.5: automatically inject the X-API-Key header when a key
+// is present in localStorage. The /enrich endpoint requires it; other
+// endpoints simply ignore the header so it's safe to send always.
 // ----------------------------------------------------------------------------
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+
+  const apiKey = getApiKey();
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey;
+  }
+
   const response = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers,
   });
 
   if (!response.ok) {
@@ -289,6 +307,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       detail = body.detail || detail;
     } catch {
       // Response body not JSON; keep the status text
+    }
+    // Clearer message for the auth case — the most likely reason a user
+    // sees a 401 here is that they haven't set their API key in Settings.
+    if (response.status === 401) {
+      detail = `${detail} — open Settings (gear icon) to set your API key.`;
     }
     throw new ApiError(response.status, detail);
   }
