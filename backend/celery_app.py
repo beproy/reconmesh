@@ -45,6 +45,7 @@ app = Celery(
     # modules are then registered with the broker.
     include=[
         "tasks.enrichment_tasks",
+        "tasks.mitre_tasks",
     ],
 )
 

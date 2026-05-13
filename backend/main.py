@@ -46,6 +46,9 @@ from schemas import (
 )
 from ingesters.urlhaus import UrlhausIngester
 from tasks.enrichment_tasks import TASK_FOR_ENRICHMENT_TYPE
+from tasks.mitre_tasks import refresh_mitre_attack
+from celery.result import AsyncResult
+from celery_app import app as celery_app
 from auth import generate_api_key, hash_api_key, require_api_key
 
 
@@ -546,3 +549,75 @@ def mint_api_key(req: MintKeyRequest, db: Session = Depends(get_db)):
         api_key=raw_key,  # only time this is ever visible
         created_at=key_row.created_at,
     )
+
+# ----------------------------------------------------------------------------
+# MITRE ATT&CK ingestion (Session 19)
+# ----------------------------------------------------------------------------
+class MitreRefreshDispatchedOut(BaseModel):
+    task_id: str
+    status: str
+    poll_url: str
+ 
+ 
+@app.post(
+    "/feeds/mitre/refresh",
+    response_model=MitreRefreshDispatchedOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Dispatch async MITRE ATT&CK ingestion (Celery task)",
+)
+def refresh_mitre(
+    api_key: ApiKey = Depends(require_api_key),
+):
+    """
+    Fires the MITRE ingest as a Celery task. Returns immediately with a
+    task_id the caller polls via GET /tasks/{task_id}.
+ 
+    Bundle is ~35MB and ingest takes a few minutes — too long for a
+    synchronous HTTP request. API-key protected.
+    """
+    async_result = refresh_mitre_attack.delay()
+    return MitreRefreshDispatchedOut(
+        task_id=async_result.id,
+        status="pending",
+        poll_url=f"/tasks/{async_result.id}",
+    )
+ 
+ 
+class TaskStatusOut(BaseModel):
+    task_id: str
+    state: str
+    ready: bool
+    successful: Optional[bool] = None
+    result: Optional[dict] = None
+ 
+ 
+@app.get(
+    "/tasks/{task_id}",
+    response_model=TaskStatusOut,
+    summary="Poll any Celery task by ID (generic — used by MITRE and future ingesters)",
+)
+def get_task_status(task_id: str):
+    """
+    Generic Celery AsyncResult poller. Unprotected — task IDs are
+    unguessable UUIDs and contain no sensitive data.
+    """
+    async_result = AsyncResult(task_id, app=celery_app)
+    state = async_result.state
+ 
+    result_data = None
+    successful = None
+    if async_result.ready():
+        successful = async_result.successful()
+        if successful:
+            raw = async_result.result
+            if isinstance(raw, dict):
+                result_data = raw
+ 
+    return TaskStatusOut(
+        task_id=task_id,
+        state=state,
+        ready=async_result.ready(),
+        successful=successful,
+        result=result_data,
+    )
+ 
