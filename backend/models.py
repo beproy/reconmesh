@@ -413,3 +413,149 @@ class ApiKey(Base):
         onupdate=utc_now,
         nullable=False,
     )
+
+
+# ----------------------------------------------------------------------------
+# MITRE ATT&CK — Enterprise taxonomy (Session 19)
+#
+# Four tables mirroring the STIX 2.1 object types we care about:
+#   - attack_groups        (intrusion-set)
+#   - attack_techniques    (attack-pattern)
+#   - attack_malware       (malware)
+#   - attack_relationships (relationship)
+#
+# Design notes:
+#   * STIX ID (e.g. "intrusion-set--c416b28c-...") is the natural PK.
+#     It's stable across upstream edits, globally unique, and matches the
+#     references used in relationship objects.
+#   * `attack_id` (G0016, T1566.001, S0154) is the human-readable ID we'll
+#     show in the UI — pulled out of the `external_references` array where
+#     source_name == "mitre-attack". Unique-indexed for fast lookup.
+#   * Relationships use loose refs to source_ref/target_ref (no FK).
+#     STIX relationships can point at object types we don't import
+#     (tools, mitigations, campaigns). Loose refs + indexes is the
+#     industry-standard approach.
+#   * `revoked` and `deprecated` columns are present even though we skip
+#     such objects on ingest — gives us an escape hatch later (e.g.
+#     "show me deprecated techniques") without another migration.
+#   * `kill_chain_phases`, `aliases`, etc. are JSONB — matches the
+#     existing Enrichment.data pattern in this file.
+# ----------------------------------------------------------------------------
+
+class AttackGroup(Base):
+    """A threat actor / intrusion-set from MITRE ATT&CK (e.g. APT29, FIN7)."""
+    __tablename__ = "attack_groups"
+
+    stix_id = Column(Text, primary_key=True)
+    attack_id = Column(Text, nullable=False, unique=True, index=True)  # G0016
+    name = Column(Text, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    aliases = Column(JSONB, nullable=False, default=list)
+    external_references = Column(JSONB, nullable=False, default=list)
+
+    created = Column(DateTime(timezone=True), nullable=True)
+    modified = Column(DateTime(timezone=True), nullable=True)
+    revoked = Column(Boolean, nullable=False, default=False)
+    deprecated = Column(Boolean, nullable=False, default=False)
+
+    ingested_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class AttackTechnique(Base):
+    """A technique or sub-technique from ATT&CK Enterprise (e.g. T1566.001)."""
+    __tablename__ = "attack_techniques"
+
+    stix_id = Column(Text, primary_key=True)
+    attack_id = Column(Text, nullable=False, unique=True, index=True)  # T1566 or T1566.001
+    name = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    is_subtechnique = Column(Boolean, nullable=False, default=False)
+    kill_chain_phases = Column(JSONB, nullable=False, default=list)
+    platforms = Column(JSONB, nullable=False, default=list)
+    data_sources = Column(JSONB, nullable=False, default=list)
+    detection = Column(Text, nullable=True)
+    external_references = Column(JSONB, nullable=False, default=list)
+
+    created = Column(DateTime(timezone=True), nullable=True)
+    modified = Column(DateTime(timezone=True), nullable=True)
+    revoked = Column(Boolean, nullable=False, default=False)
+    deprecated = Column(Boolean, nullable=False, default=False)
+
+    ingested_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class AttackMalware(Base):
+    """A malware family from ATT&CK (e.g. Emotet — S0367)."""
+    __tablename__ = "attack_malware"
+
+    stix_id = Column(Text, primary_key=True)
+    attack_id = Column(Text, nullable=False, unique=True, index=True)  # S0367
+    name = Column(Text, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    aliases = Column(JSONB, nullable=False, default=list)
+    malware_types = Column(JSONB, nullable=False, default=list)
+    platforms = Column(JSONB, nullable=False, default=list)
+    is_family = Column(Boolean, nullable=False, default=True)
+    external_references = Column(JSONB, nullable=False, default=list)
+
+    created = Column(DateTime(timezone=True), nullable=True)
+    modified = Column(DateTime(timezone=True), nullable=True)
+    revoked = Column(Boolean, nullable=False, default=False)
+    deprecated = Column(Boolean, nullable=False, default=False)
+
+    ingested_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+
+class AttackRelationship(Base):
+    """
+    A STIX relationship object linking two ATT&CK entities.
+
+    Common relationship_types we care about:
+      - "uses"            (intrusion-set --uses--> malware/technique)
+      - "attributed-to"   (intrusion-set --attributed-to--> intrusion-set)
+      - "subtechnique-of" (attack-pattern --subtechnique-of--> attack-pattern)
+      - "mitigates"       (course-of-action --mitigates--> attack-pattern)
+      - "detects"         (x-mitre-data-component --detects--> attack-pattern)
+
+    source_ref and target_ref are STIX IDs and are NOT FK-enforced — they
+    can reference STIX types we don't import (tools, mitigations,
+    campaigns, data components). Indexed for fast pivot queries.
+    """
+    __tablename__ = "attack_relationships"
+
+    stix_id = Column(Text, primary_key=True)
+    relationship_type = Column(Text, nullable=False, index=True)
+    source_ref = Column(Text, nullable=False, index=True)
+    target_ref = Column(Text, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+
+    created = Column(DateTime(timezone=True), nullable=True)
+    modified = Column(DateTime(timezone=True), nullable=True)
+    revoked = Column(Boolean, nullable=False, default=False)
+    deprecated = Column(Boolean, nullable=False, default=False)
+
+    ingested_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
