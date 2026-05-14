@@ -27,6 +27,10 @@ from fastapi import Header
 from database import SessionLocal, engine, get_db
 from models import (
     ApiKey,
+    AttackGroup,
+    AttackMalware,
+    AttackRelationship,
+    AttackTechnique,
     Domain,
     Enrichment,
     EnrichmentJob,
@@ -620,4 +624,272 @@ def get_task_status(task_id: str):
         successful=successful,
         result=result_data,
     )
+
+
+# ----------------------------------------------------------------------------
+# MITRE ATT&CK catalog endpoints (Session 20) — public, read-only
+# ----------------------------------------------------------------------------
+# These serve the ATT&CK data ingested in Session 19. No auth required —
+# this is public reference data. Paginated list + detail-by-attack-id.
  
+class AttackGroupListItem(BaseModel):
+    attack_id: str
+    stix_id: str
+    name: str
+    aliases: list[str]
+ 
+ 
+class AttackGroupDetail(BaseModel):
+    attack_id: str
+    stix_id: str
+    name: str
+    description: Optional[str] = None
+    aliases: list[str]
+    external_references: list[dict]
+    related_techniques: list[dict] = []
+    related_malware: list[dict] = []
+ 
+ 
+class AttackTechniqueListItem(BaseModel):
+    attack_id: str
+    stix_id: str
+    name: str
+    is_subtechnique: bool
+    tactics: list[str]
+ 
+ 
+class AttackTechniqueDetail(BaseModel):
+    attack_id: str
+    stix_id: str
+    name: str
+    description: Optional[str] = None
+    is_subtechnique: bool
+    tactics: list[str]
+    platforms: list[str]
+    data_sources: list[str]
+    detection: Optional[str] = None
+    external_references: list[dict]
+    related_groups: list[dict] = []
+ 
+ 
+def _tactics_from_phases(phases: list[dict] | None) -> list[str]:
+    """Pull tactic phase names out of STIX kill_chain_phases."""
+    if not phases:
+        return []
+    return [
+        p.get("phase_name", "")
+        for p in phases
+        if p.get("kill_chain_name") == "mitre-attack" and p.get("phase_name")
+    ]
+ 
+ 
+@app.get(
+    "/attack/groups",
+    response_model=list[AttackGroupListItem],
+    summary="List MITRE ATT&CK threat groups (paginated, searchable)",
+)
+def list_attack_groups(
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 25,
+    db: Session = Depends(get_db),
+):
+    query = db.query(AttackGroup)
+    if search:
+        # ILIKE search across name + aliases. aliases is JSONB so we
+        # cast to text for the LIKE — simple but works.
+        from sqlalchemy import or_, cast, String
+        like = f"%{search.strip().lower()}%"
+        query = query.filter(
+            or_(
+                AttackGroup.name.ilike(like),
+                AttackGroup.attack_id.ilike(like),
+                cast(AttackGroup.aliases, String).ilike(like),
+            )
+        )
+ 
+    offset = (max(page, 1) - 1) * page_size
+    rows = (
+        query.order_by(AttackGroup.attack_id)
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+ 
+    return [
+        AttackGroupListItem(
+            attack_id=g.attack_id,
+            stix_id=g.stix_id,
+            name=g.name,
+            aliases=g.aliases or [],
+        )
+        for g in rows
+    ]
+ 
+ 
+@app.get(
+    "/attack/groups/{attack_id}",
+    response_model=AttackGroupDetail,
+    summary="Get a single ATT&CK group with related techniques and malware",
+)
+def get_attack_group(attack_id: str, db: Session = Depends(get_db)):
+    group = (
+        db.query(AttackGroup)
+        .filter(AttackGroup.attack_id == attack_id.upper())
+        .first()
+    )
+    if group is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Group '{attack_id}' not found",
+        )
+ 
+    # Find all "uses" relationships from this group
+    rels = (
+        db.query(AttackRelationship)
+        .filter(
+            AttackRelationship.source_ref == group.stix_id,
+            AttackRelationship.relationship_type == "uses",
+        )
+        .all()
+    )
+ 
+    # Bucket targets by STIX type prefix
+    technique_refs = [r.target_ref for r in rels if r.target_ref.startswith("attack-pattern--")]
+    malware_refs = [r.target_ref for r in rels if r.target_ref.startswith("malware--")]
+ 
+    # Fetch the related objects in one go each
+    related_techniques = []
+    if technique_refs:
+        techniques = (
+            db.query(AttackTechnique)
+            .filter(AttackTechnique.stix_id.in_(technique_refs))
+            .order_by(AttackTechnique.attack_id)
+            .all()
+        )
+        related_techniques = [
+            {"attack_id": t.attack_id, "name": t.name, "is_subtechnique": t.is_subtechnique}
+            for t in techniques
+        ]
+ 
+    related_malware = []
+    if malware_refs:
+        malware = (
+            db.query(AttackMalware)
+            .filter(AttackMalware.stix_id.in_(malware_refs))
+            .order_by(AttackMalware.attack_id)
+            .all()
+        )
+        related_malware = [
+            {"attack_id": m.attack_id, "name": m.name}
+            for m in malware
+        ]
+ 
+    return AttackGroupDetail(
+        attack_id=group.attack_id,
+        stix_id=group.stix_id,
+        name=group.name,
+        description=group.description,
+        aliases=group.aliases or [],
+        external_references=group.external_references or [],
+        related_techniques=related_techniques,
+        related_malware=related_malware,
+    )
+ 
+ 
+@app.get(
+    "/attack/techniques",
+    response_model=list[AttackTechniqueListItem],
+    summary="List MITRE ATT&CK techniques (paginated, searchable)",
+)
+def list_attack_techniques(
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 25,
+    db: Session = Depends(get_db),
+):
+    query = db.query(AttackTechnique)
+    if search:
+        from sqlalchemy import or_
+        like = f"%{search.strip().lower()}%"
+        query = query.filter(
+            or_(
+                AttackTechnique.name.ilike(like),
+                AttackTechnique.attack_id.ilike(like),
+            )
+        )
+ 
+    offset = (max(page, 1) - 1) * page_size
+    rows = (
+        query.order_by(AttackTechnique.attack_id)
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+ 
+    return [
+        AttackTechniqueListItem(
+            attack_id=t.attack_id,
+            stix_id=t.stix_id,
+            name=t.name,
+            is_subtechnique=t.is_subtechnique,
+            tactics=_tactics_from_phases(t.kill_chain_phases),
+        )
+        for t in rows
+    ]
+ 
+ 
+@app.get(
+    "/attack/techniques/{attack_id}",
+    response_model=AttackTechniqueDetail,
+    summary="Get a single ATT&CK technique with related groups",
+)
+def get_attack_technique(attack_id: str, db: Session = Depends(get_db)):
+    technique = (
+        db.query(AttackTechnique)
+        .filter(AttackTechnique.attack_id == attack_id.upper())
+        .first()
+    )
+    if technique is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Technique '{attack_id}' not found",
+        )
+ 
+    # Find all "uses" relationships pointing AT this technique
+    rels = (
+        db.query(AttackRelationship)
+        .filter(
+            AttackRelationship.target_ref == technique.stix_id,
+            AttackRelationship.relationship_type == "uses",
+        )
+        .all()
+    )
+ 
+    group_refs = [r.source_ref for r in rels if r.source_ref.startswith("intrusion-set--")]
+    related_groups = []
+    if group_refs:
+        groups = (
+            db.query(AttackGroup)
+            .filter(AttackGroup.stix_id.in_(group_refs))
+            .order_by(AttackGroup.attack_id)
+            .all()
+        )
+        related_groups = [
+            {"attack_id": g.attack_id, "name": g.name}
+            for g in groups
+        ]
+ 
+    return AttackTechniqueDetail(
+        attack_id=technique.attack_id,
+        stix_id=technique.stix_id,
+        name=technique.name,
+        description=technique.description,
+        is_subtechnique=technique.is_subtechnique,
+        tactics=_tactics_from_phases(technique.kill_chain_phases),
+        platforms=technique.platforms or [],
+        data_sources=technique.data_sources or [],
+        detection=technique.detection,
+        external_references=technique.external_references or [],
+        related_groups=related_groups,
+    )

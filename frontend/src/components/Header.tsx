@@ -1,6 +1,13 @@
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import { Shield } from 'lucide-react';
 import { SettingsDialog } from '@/components/SettingsDialog';
+
+// Helper for nav link styling — shows a primary color when active
+function navLinkClass({ isActive }: { isActive: boolean }) {
+  return isActive
+    ? 'text-sm text-foreground font-medium'
+    : 'text-sm text-muted-foreground hover:text-foreground';
+}
 
 export function Header() {
   return (
@@ -13,12 +20,15 @@ export function Header() {
           </span>
         </Link>
         <nav className="flex items-center gap-4">
-          <Link
-            to="/sources"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
+          <NavLink to="/groups" className={navLinkClass}>
+            Groups
+          </NavLink>
+          <NavLink to="/techniques" className={navLinkClass}>
+            Techniques
+          </NavLink>
+          <NavLink to="/sources" className={navLinkClass}>
             Sources
-          </Link>
+          </NavLink>
           <SettingsDialog />
         </nav>
       </div>
