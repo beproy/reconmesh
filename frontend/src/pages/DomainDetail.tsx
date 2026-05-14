@@ -30,6 +30,7 @@ import {
   type ShodanData,
   type AbuseIPDBData,
   type AhmiaData,
+  type MnemonicPdnsData,
   type EnrichJob,
 } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1159,6 +1160,117 @@ function AhmiaSection(props: { enrichment: Enrichment }) {
   );
 }
 // ----------------------------------------------------------------------------
+    // Mnemonic Passive DNS section
+    // ----------------------------------------------------------------------------
+    function MnemonicPdnsSection(props: { enrichment: Enrichment }) {
+      const [showAll, setShowAll] = useState(false);
+      const data = props.enrichment.data as unknown as MnemonicPdnsData;
+ 
+      if (props.enrichment.status !== 'ok') {
+        return (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                Passive DNS (mnemonic)
+                <StatusIcon status={props.enrichment.status} />
+                <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+                  {props.enrichment.status}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {props.enrichment.status === 'not_found'
+                ? 'No passive DNS records found for this domain in mnemonic.'
+                : props.enrichment.status === 'rate_limited'
+                ? 'mnemonic rate-limited the request (10/min, 1000/day). Re-enrich later.'
+                : props.enrichment.error_message || 'mnemonic PDNS lookup did not complete.'}
+            </CardContent>
+          </Card>
+        );
+      }
+ 
+      const records = data.records || [];
+      const visible = showAll ? records : records.slice(0, 15);
+      const hasMore = records.length > 15;
+      const capped = data.total_records >= data.cap_applied;
+ 
+      return (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              Passive DNS (mnemonic)
+              <StatusIcon status={props.enrichment.status} />
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                {data.total_records} record{data.total_records === 1 ? '' : 's'} ·{' '}
+                {data.unique_answers} unique answer{data.unique_answers === 1 ? '' : 's'}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0 text-sm">
+            {data.rrtypes.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                Record types observed: {data.rrtypes.join(', ').toUpperCase()}
+              </div>
+            )}
+ 
+            {records.length === 0 ? (
+              <div className="text-muted-foreground">
+                No passive DNS records to display.
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  {visible.map((rec, idx) => (
+                    <div
+                      key={idx}
+                      className="flex flex-wrap items-center justify-between gap-2 border-b border-border/30 pb-1 last:border-0 last:pb-0"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Badge className="shrink-0 bg-muted/50 text-muted-foreground border-border font-mono text-xs uppercase">
+                          {rec.rrtype || '?'}
+                        </Badge>
+                        <span className="break-all font-mono text-xs text-foreground">
+                          {rec.answer}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
+                        <span title="observation count">{rec.times}x</span>
+                        <span>{fmtDateShort(rec.last_seen)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+ 
+                {hasMore && (
+                  <button
+                    onClick={() => setShowAll(!showAll)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {showAll ? 'Show less' : `Show all ${records.length} records`}
+                  </button>
+                )}
+ 
+                {capped && (
+                  <div className="rounded border border-border/50 bg-muted/30 p-2 text-xs text-muted-foreground">
+                    Showing the {data.cap_applied} most-observed records. mnemonic
+                    had more historical data than we store per domain.
+                  </div>
+                )}
+              </>
+            )}
+ 
+            <div className="text-xs text-muted-foreground">
+              Source: mnemonic public Passive DNS (TLP:WHITE). Passive DNS shows
+              what a domain has historically resolved to — useful for spotting
+              infrastructure changes over time.
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+// ----------------------------------------------------------------------------
 // Main page component
 // ----------------------------------------------------------------------------
 export function DomainDetail() {
@@ -1288,6 +1400,9 @@ export function DomainDetail() {
   );
   const ahmiaEnrichment = data.enrichments.find(
     (e) => e.enrichment_type === 'ahmia'
+  );
+  const mnemonicEnrichment = data.enrichments.find(
+    (e) => e.enrichment_type === 'mnemonic_pdns'
   );
 
   return (
@@ -1421,6 +1536,11 @@ export function DomainDetail() {
           {ahmiaEnrichment && (
             <div className="lg:col-span-2">
               <AhmiaSection enrichment={ahmiaEnrichment} />
+            </div>
+          )}
+          {mnemonicEnrichment && (
+            <div className="lg:col-span-2">
+              <MnemonicPdnsSection enrichment={mnemonicEnrichment} />
             </div>
           )}
         </div>

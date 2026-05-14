@@ -275,6 +275,10 @@ class EnrichmentType(str, PyEnum):
     SHODAN = "shodan"
     ABUSEIPDB = "abuseipdb"
     AHMIA = "ahmia"
+    URLSCAN = "urlscan"            # Session 22
+    HACKERTARGET = "hackertarget"  # Session 23
+    MNEMONIC_PDNS = "mnemonic_pdns"  # Session 24
+    THREATMINER = "threatminer"    # Session 25
 
 
 class EnrichmentStatus(str, PyEnum):

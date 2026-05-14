@@ -202,10 +202,28 @@ export interface AhmiaData {
   source_url: string;
 }
 
+export interface MnemonicPdnsRecord {
+      rrtype: string;
+      query: string;
+      answer: string;
+      first_seen: string | null;
+      last_seen: string | null;
+      times: number;
+    }
+ 
+    export interface MnemonicPdnsData {
+      query: string;
+      total_records: number;
+      unique_answers: number;
+      rrtypes: string[];
+      records: MnemonicPdnsRecord[];
+      cap_applied: number;
+    }
+
 export interface Enrichment {
   enrichment_type: string;
   status: EnrichmentStatus;
-  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | VirusTotalData | ShodanData | AbuseIPDBData | AhmiaData | Record<string, unknown>;
+  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | VirusTotalData | ShodanData | AbuseIPDBData | AhmiaData | MnemonicPdnsData | Record<string, unknown>;
   error_message: string | null;
   fetched_at: string;
 }
