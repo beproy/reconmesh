@@ -1,21 +1,104 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Search, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, ArrowUpDown, Database, Activity, Sparkles, Users, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { api, type DomainListItem } from '@/lib/api';
+import { api, type DomainListItem, type Stats } from '@/lib/api';
 
 const PAGE_SIZE = 25;
 
 type SortField = 'name' | 'indicator_count' | 'enrichment_count' | 'first_seen' | 'last_seen';
 
+// ----------------------------------------------------------------------------
+// Stats banner — small row of counts above the search box
+// ----------------------------------------------------------------------------
+function StatsBanner() {
+  const { data, isLoading } = useQuery<Stats>({
+    queryKey: ['stats'],
+    queryFn: () => api.getStats(),
+    // Refresh stats occasionally — not too often (these are COUNT queries)
+    staleTime: 30_000,
+  });
+
+  const items = [
+    {
+      icon: Database,
+      label: 'Domains',
+      value: data?.domains,
+      href: null,
+    },
+    {
+      icon: Activity,
+      label: 'Indicators',
+      value: data?.indicators,
+      href: null,
+    },
+    {
+      icon: Sparkles,
+      label: 'Enrichments',
+      value: data?.enrichments,
+      href: null,
+    },
+    {
+      icon: Users,
+      label: 'ATT&CK groups',
+      value: data?.attack_groups,
+      href: '/groups',
+    },
+    {
+      icon: Target,
+      label: 'ATT&CK techniques',
+      value: data?.attack_techniques,
+      href: '/techniques',
+    },
+  ];
+
+  return (
+    <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {items.map((item) => {
+        const Icon = item.icon;
+        const content = (
+          <Card className="transition-colors hover:border-primary/40">
+            <CardContent className="flex items-center gap-3 py-3">
+              <Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <div className="text-xs uppercase text-muted-foreground">
+                  {item.label}
+                </div>
+                <div className="font-mono text-lg font-semibold text-foreground">
+                  {isLoading ? (
+                    <span className="inline-block h-5 w-12 animate-pulse rounded bg-muted" />
+                  ) : item.value !== undefined ? (
+                    item.value.toLocaleString()
+                  ) : (
+                    '—'
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+        return item.href ? (
+          <Link key={item.label} to={item.href}>
+            {content}
+          </Link>
+        ) : (
+          <div key={item.label}>{content}</div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------------
+// Main page
+// ----------------------------------------------------------------------------
 export function Home() {
   const navigate = useNavigate();
 
-  // Search / filter / sort / pagination state
   const [searchInput, setSearchInput] = useState('');
   const [activeSearch, setActiveSearch] = useState('');
   const [filterIndicators, setFilterIndicators] = useState<string>('all');
@@ -24,7 +107,6 @@ export function Home() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
 
-  // Build query params
   const queryParams: Record<string, string> = {
     page: String(page),
     page_size: String(PAGE_SIZE),
@@ -45,12 +127,10 @@ export function Home() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = searchInput.trim().toLowerCase();
-    // If it looks like an exact domain (has a dot), navigate to dossier
     if (trimmed && trimmed.includes('.')) {
       navigate(`/domains/${encodeURIComponent(trimmed)}`);
       return;
     }
-    // Otherwise, filter the list
     setActiveSearch(trimmed);
     setPage(1);
   };
@@ -79,16 +159,20 @@ export function Home() {
 
   return (
     <div>
-      {/* Hero + search */}
-      <div className="mb-8 text-center">
+      {/* Hero */}
+      <div className="mb-6 text-center">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Domain-centric threat intelligence
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Search a specific domain or browse all domains below.
+          Search a specific domain or browse what's in the database.
         </p>
       </div>
 
+      {/* Stats banner */}
+      <StatsBanner />
+
+      {/* Search */}
       <form onSubmit={handleSearch} className="mb-6">
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -289,7 +373,7 @@ export function Home() {
       </Card>
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
-        Tip: click any domain row to see its full dossier. Use the Sources page to see ingested feeds.
+        Tip: click any domain row to see its full dossier.
       </p>
     </div>
   );

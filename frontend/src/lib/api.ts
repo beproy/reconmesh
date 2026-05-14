@@ -1,11 +1,8 @@
 /**
  * API client for the ReconMesh backend.
  *
- * All calls go through the Vite dev-proxy: /api/* on the browser side
- * is forwarded to backend:8000 inside Docker.
- *
  * Session 19.5: X-API-Key header injection.
- * Session 20: MITRE ATT&CK catalog types and methods.
+ * Session 20: MITRE ATT&CK catalog + global stats.
  */
 import { getApiKey } from './apiKey';
 
@@ -57,7 +54,7 @@ export interface Indicator {
 }
 
 // ----------------------------------------------------------------------------
-// Enrichment types — match backend shapes
+// Enrichment types
 // ----------------------------------------------------------------------------
 export type EnrichmentStatus = 'ok' | 'error' | 'timeout' | 'rate_limited' | 'not_found';
 
@@ -332,6 +329,18 @@ export interface AttackTechniqueDetail {
 }
 
 // ----------------------------------------------------------------------------
+// Global stats (Session 20 polish)
+// ----------------------------------------------------------------------------
+export interface Stats {
+  domains: number;
+  indicators: number;
+  enrichments: number;
+  sources: number;
+  attack_groups: number;
+  attack_techniques: number;
+}
+
+// ----------------------------------------------------------------------------
 // Fetch helper
 // ----------------------------------------------------------------------------
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -382,6 +391,8 @@ export const api = {
     request<EnrichJob>(`/domains/${encodeURIComponent(name)}/enrich/${jobId}`),
 
   listSources: () => request<SourceListItem[]>('/sources'),
+
+  getStats: () => request<Stats>('/stats'),
 
   // MITRE ATT&CK catalog (Session 20)
   listAttackGroups: (params: Record<string, string>) => {

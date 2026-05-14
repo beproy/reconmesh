@@ -893,3 +893,35 @@ def get_attack_technique(attack_id: str, db: Session = Depends(get_db)):
         external_references=technique.external_references or [],
         related_groups=related_groups,
     )
+
+# ----------------------------------------------------------------------------
+# Global stats — used by the home page banner (Session 20 polish)
+# ----------------------------------------------------------------------------
+class StatsOut(BaseModel):
+    domains: int
+    indicators: int
+    enrichments: int
+    sources: int
+    attack_groups: int
+    attack_techniques: int
+ 
+ 
+@app.get(
+    "/stats",
+    response_model=StatsOut,
+    summary="Global row counts for the home page banner",
+)
+def get_stats(db: Session = Depends(get_db)):
+    """
+    Returns counts across the core tables. Used by the home page to show
+    a quick "what's in here" banner. Cheap COUNT(*) queries — fine for
+    the size of data we're handling.
+    """
+    return StatsOut(
+        domains=db.query(Domain).count(),
+        indicators=db.query(Indicator).count(),
+        enrichments=db.query(Enrichment).count(),
+        sources=db.query(Source).count(),
+        attack_groups=db.query(AttackGroup).count(),
+        attack_techniques=db.query(AttackTechnique).count(),
+    )
