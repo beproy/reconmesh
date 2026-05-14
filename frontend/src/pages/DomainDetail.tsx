@@ -31,6 +31,9 @@ import {
   type AbuseIPDBData,
   type AhmiaData,
   type MnemonicPdnsData,
+  type UrlscanData,
+  type HackerTargetData,
+  type ThreatMinerData,
   type EnrichJob,
 } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1270,6 +1273,351 @@ function AhmiaSection(props: { enrichment: Enrichment }) {
         </Card>
       );
     }
+
+
+// ----------------------------------------------------------------------------
+    // URLScan section
+    // ----------------------------------------------------------------------------
+    function UrlscanSection(props: { enrichment: Enrichment }) {
+      const [showAll, setShowAll] = useState(false);
+      const data = props.enrichment.data as unknown as UrlscanData;
+ 
+      if (props.enrichment.status !== 'ok') {
+        return (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                URLScan.io
+                <StatusIcon status={props.enrichment.status} />
+                <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+                  {props.enrichment.status}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {props.enrichment.status === 'not_found'
+                ? 'No URLScan scans found for this domain.'
+                : props.enrichment.status === 'rate_limited'
+                ? 'URLScan rate-limited the request. Re-enrich later.'
+                : props.enrichment.error_message || 'URLScan lookup did not complete.'}
+            </CardContent>
+          </Card>
+        );
+      }
+ 
+      const scans = data.scans || [];
+      const visible = showAll ? scans : scans.slice(0, 10);
+      const hasMore = scans.length > 10;
+ 
+      return (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              URLScan.io
+              <StatusIcon status={props.enrichment.status} />
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                {data.total_scans}{data.has_more ? '+' : ''} scan{data.total_scans === 1 ? '' : 's'} ·{' '}
+                {data.unique_ips} unique IP{data.unique_ips === 1 ? '' : 's'} ·{' '}
+                {data.unique_countries} countr{data.unique_countries === 1 ? 'y' : 'ies'}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0 text-sm">
+            {scans.length === 0 ? (
+              <div className="text-muted-foreground">No individual scans to display.</div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {visible.map((scan, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded border border-border/40 bg-muted/20 p-2 space-y-1"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="break-all font-mono text-xs text-foreground">
+                          {scan.url}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        {scan.ip && <span className="font-mono">{scan.ip}</span>}
+                        {scan.country && <span>{scan.country}</span>}
+                        {scan.server && <span>{scan.server}</span>}
+                        <span>{fmtDateShort(scan.scanned_at)}</span>
+                        {scan.result_url && (
+                          <a
+                            href={scan.result_url.replace('/api/v1/result/', '/result/')}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground underline"
+                          >
+                            view scan
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+ 
+                {hasMore && (
+                  <button
+                    onClick={() => setShowAll(!showAll)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {showAll ? 'Show less' : `Show all ${scans.length} stored scans`}
+                  </button>
+                )}
+ 
+                {data.has_more && (
+                  <div className="rounded border border-border/50 bg-muted/30 p-2 text-xs text-muted-foreground">
+                    URLScan has more than {data.total_scans} scans for this domain.
+                    Showing the {data.cap_applied} most recent.
+                  </div>
+                )}
+              </>
+            )}
+ 
+            <div className="text-xs text-muted-foreground">
+              Source: URLScan.io Search API. Each scan is a recorded browse of a
+              URL on this domain — useful for seeing infrastructure history.
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+ 
+    // ----------------------------------------------------------------------------
+    // HackerTarget reverse-IP section
+    // ----------------------------------------------------------------------------
+    function HackerTargetSection(props: { enrichment: Enrichment }) {
+      const [showAll, setShowAll] = useState(false);
+      const data = props.enrichment.data as unknown as HackerTargetData;
+ 
+      if (props.enrichment.status !== 'ok') {
+        return (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Radar className="h-4 w-4 text-muted-foreground" />
+                Reverse IP (HackerTarget)
+                <StatusIcon status={props.enrichment.status} />
+                <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+                  {props.enrichment.status}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {props.enrichment.status === 'not_found'
+                ? 'No co-hosted hostnames found for this domain.'
+                : props.enrichment.status === 'rate_limited'
+                ? 'HackerTarget daily quota exceeded (free tier: 20/day). Set HACKERTARGET_API_KEY for higher limits, or re-enrich tomorrow.'
+                : props.enrichment.error_message || 'HackerTarget lookup did not complete.'}
+            </CardContent>
+          </Card>
+        );
+      }
+ 
+      const hostnames = data.hostnames || [];
+      const visible = showAll ? hostnames : hostnames.slice(0, 20);
+      const hasMore = hostnames.length > 20;
+ 
+      return (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Radar className="h-4 w-4 text-muted-foreground" />
+              Reverse IP (HackerTarget)
+              <StatusIcon status={props.enrichment.status} />
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                {data.stored}
+                {data.was_capped ? `+ of ${data.total_returned}` : ''} co-hosted hostname
+                {data.stored === 1 ? '' : 's'}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0 text-sm">
+            {hostnames.length === 0 ? (
+              <div className="text-muted-foreground">
+                No other hostnames share this domain's IP.
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-1.5">
+                  {visible.map((host, idx) => (
+                    <Badge
+                      key={idx}
+                      className="bg-muted/50 text-muted-foreground border-border font-mono text-xs"
+                    >
+                      {host}
+                    </Badge>
+                  ))}
+                </div>
+ 
+                {hasMore && (
+                  <button
+                    onClick={() => setShowAll(!showAll)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {showAll ? 'Show less' : `Show all ${data.stored} stored hostnames`}
+                  </button>
+                )}
+ 
+                {data.free_tier_note && (
+                  <div className="rounded border border-border/50 bg-muted/30 p-2 text-xs text-muted-foreground">
+                    HackerTarget's free tier limits results per query. Set
+                    HACKERTARGET_API_KEY in .env (and add it to docker-compose.yml
+                    like the other keys) for higher limits.
+                  </div>
+                )}
+              </>
+            )}
+ 
+            <div className="text-xs text-muted-foreground">
+              Source: HackerTarget reverse-IP. These hostnames share an IP with
+              this domain — could be shared hosting, or related infrastructure.
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+ 
+    // ----------------------------------------------------------------------------
+    // ThreatMiner section
+    // ----------------------------------------------------------------------------
+    function ThreatMinerSection(props: { enrichment: Enrichment }) {
+      const [showAllSubs, setShowAllSubs] = useState(false);
+      const data = props.enrichment.data as unknown as ThreatMinerData;
+ 
+      if (props.enrichment.status !== 'ok') {
+        return (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Target className="h-4 w-4 text-muted-foreground" />
+                ThreatMiner
+                <StatusIcon status={props.enrichment.status} />
+                <Badge className="ml-auto bg-muted text-muted-foreground border-border text-xs">
+                  {props.enrichment.status}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              {props.enrichment.status === 'not_found'
+                ? 'ThreatMiner has no passive DNS, subdomains, or samples for this domain.'
+                : props.enrichment.error_message || 'ThreatMiner lookup did not complete.'}
+            </CardContent>
+          </Card>
+        );
+      }
+ 
+      const pdns = data.passive_dns || [];
+      const subdomains = data.subdomains || [];
+      const samples = data.related_samples || [];
+      const visibleSubs = showAllSubs ? subdomains : subdomains.slice(0, 30);
+ 
+      return (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Target className="h-4 w-4 text-muted-foreground" />
+              ThreatMiner
+              <StatusIcon status={props.enrichment.status} />
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                {data.passive_dns_count} pDNS · {data.subdomains_count} subdomains ·{' '}
+                {data.related_samples_count} sample{data.related_samples_count === 1 ? '' : 's'}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-0 text-sm">
+            {/* Passive DNS */}
+            {pdns.length > 0 && (
+              <div>
+                <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
+                  Passive DNS ({data.passive_dns_count})
+                </div>
+                <div className="space-y-1">
+                  {pdns.slice(0, 15).map((rec, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between gap-3 border-b border-border/30 pb-1 last:border-0 last:pb-0"
+                    >
+                      <span className="font-mono text-xs text-foreground">{rec.ip}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {fmtDateShort(rec.first_seen)} – {fmtDateShort(rec.last_seen)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+ 
+            {/* Subdomains */}
+            {subdomains.length > 0 && (
+              <div>
+                <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
+                  Subdomains ({data.subdomains_count})
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {visibleSubs.map((sub, idx) => (
+                    <Badge
+                      key={idx}
+                      className="bg-muted/50 text-muted-foreground border-border font-mono text-xs"
+                    >
+                      {sub}
+                    </Badge>
+                  ))}
+                </div>
+                {subdomains.length > 30 && (
+                  <button
+                    onClick={() => setShowAllSubs(!showAllSubs)}
+                    className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {showAllSubs ? 'Show less' : `Show all ${subdomains.length} subdomains`}
+                  </button>
+                )}
+              </div>
+            )}
+ 
+            {/* Related samples */}
+            {samples.length > 0 && (
+              <div>
+                <div className="mb-1 text-xs font-medium uppercase text-muted-foreground">
+                  Related malware samples ({data.related_samples_count})
+                </div>
+                <div className="space-y-1">
+                  {samples.slice(0, 15).map((s, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="break-all font-mono text-xs text-foreground">
+                        {s.hash}
+                      </span>
+                      {s.family && (
+                        <Badge className="bg-red-500/20 text-red-300 border-red-500/40 text-xs">
+                          {s.family}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+ 
+            {/* Partial errors — only shown if some calls failed */}
+            {data.partial_errors && data.partial_errors.length > 0 && (
+              <div className="rounded border border-border/50 bg-muted/30 p-2 text-xs text-muted-foreground">
+                Some ThreatMiner lookups failed: {data.partial_errors.join('; ')}
+              </div>
+            )}
+ 
+            <div className="text-xs text-muted-foreground">
+              Source: ThreatMiner. Aggregated passive DNS, discovered subdomains,
+              and malware samples seen associated with this domain.
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
 // ----------------------------------------------------------------------------
 // Main page component
 // ----------------------------------------------------------------------------
@@ -1403,6 +1751,15 @@ export function DomainDetail() {
   );
   const mnemonicEnrichment = data.enrichments.find(
     (e) => e.enrichment_type === 'mnemonic_pdns'
+  );
+  const urlscanEnrichment = data.enrichments.find(
+    (e) => e.enrichment_type === 'urlscan'
+  );
+  const hackertargetEnrichment = data.enrichments.find(
+    (e) => e.enrichment_type === 'hackertarget'
+  );
+  const threatminerEnrichment = data.enrichments.find(
+    (e) => e.enrichment_type === 'threatminer'
   );
 
   return (
@@ -1541,6 +1898,21 @@ export function DomainDetail() {
           {mnemonicEnrichment && (
             <div className="lg:col-span-2">
               <MnemonicPdnsSection enrichment={mnemonicEnrichment} />
+            </div>
+          )}
+          {urlscanEnrichment && (
+            <div className="lg:col-span-2">
+              <UrlscanSection enrichment={urlscanEnrichment} />
+            </div>
+          )}
+          {hackertargetEnrichment && (
+            <div className="lg:col-span-2">
+              <HackerTargetSection enrichment={hackertargetEnrichment} />
+            </div>
+          )}
+          {threatminerEnrichment && (
+            <div className="lg:col-span-2">
+              <ThreatMinerSection enrichment={threatminerEnrichment} />
             </div>
           )}
         </div>

@@ -211,7 +211,7 @@ export interface MnemonicPdnsRecord {
       times: number;
     }
  
-    export interface MnemonicPdnsData {
+export interface MnemonicPdnsData {
       query: string;
       total_records: number;
       unique_answers: number;
@@ -220,10 +220,67 @@ export interface MnemonicPdnsRecord {
       cap_applied: number;
     }
 
+export interface UrlscanScan {
+      scanned_at: string | null;
+      url: string;
+      page_domain: string;
+      ip: string;
+      country: string;
+      server: string;
+      result_url: string;
+    }
+ 
+export interface UrlscanData {
+      query: string;
+      total_scans: number;
+      has_more: boolean;
+      unique_ips: number;
+      unique_countries: number;
+      scans: UrlscanScan[];
+      cap_applied: number;
+    }
+ 
+    // --- HackerTarget (Session 23) ---
+export interface HackerTargetData {
+      query: string;
+      resolved_ip: string | null;
+      total_hostnames: number;
+      hostnames: string[];
+      cap_applied: number;
+      free_tier_note: boolean;
+    }
+ 
+    // --- ThreatMiner (Session 25) ---
+export interface ThreatMinerPdnsRecord {
+      ip: string;
+      first_seen: string | null;
+      last_seen: string | null;
+    }
+ 
+export interface ThreatMinerSample {
+      hash: string;
+      family?: string | null;
+    }
+ 
+export interface ThreatMinerData {
+      query: string;
+      passive_dns: ThreatMinerPdnsRecord[];
+      passive_dns_count: number;
+      subdomains: string[];
+      subdomains_count: number;
+      related_samples: ThreatMinerSample[];
+      related_samples_count: number;
+      partial_errors: string[];
+      caps: {
+        passive_dns: number;
+        subdomains: number;
+        related_samples: number;
+      };
+    }
 export interface Enrichment {
   enrichment_type: string;
   status: EnrichmentStatus;
-  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | VirusTotalData | ShodanData | AbuseIPDBData | AhmiaData | MnemonicPdnsData | Record<string, unknown>;
+  data: DnsData | EmailSecurityData | WhoisData | TypoSquatData | VirusTotalData | ShodanData | AbuseIPDBData | AhmiaData | MnemonicPdnsData | UrlscanData | HackerTargetData | ThreatMinerData | Record<string, unknown>;
   error_message: string | null;
   fetched_at: string;
 }

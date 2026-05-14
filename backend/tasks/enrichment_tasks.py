@@ -51,6 +51,9 @@ from enrichers.shodan import ShodanEnricher
 from enrichers.abuseipdb import AbuseIPDBEnricher
 from enrichers.ahmia import AhmiaEnricher
 from enrichers.mnemonic_pdns import MnemonicPdnsEnricher
+from enrichers.urlscan import UrlscanEnricher
+from enrichers.hackertarget import HackerTargetEnricher
+from enrichers.threatminer import ThreatMinerEnricher
 
 
 # Statuses we want to retry on. NOT_FOUND, RATE_LIMITED, OK are all terminal.
@@ -214,6 +217,21 @@ def run_mnemonic_pdns_task(self: Task, job_id: int, domain_id: int, domain_name:
     return _run_enricher_task(self, MnemonicPdnsEnricher(), job_id, domain_id, domain_name)
 
 
+@app.task(bind=True, name="enrichment.urlscan")
+def run_urlscan_task(self: Task, job_id: int, domain_id: int, domain_name: str) -> dict:
+    return _run_enricher_task(self, UrlscanEnricher(), job_id, domain_id, domain_name)
+ 
+ 
+@app.task(bind=True, name="enrichment.hackertarget")
+def run_hackertarget_task(self: Task, job_id: int, domain_id: int, domain_name: str) -> dict:
+    return _run_enricher_task(self, HackerTargetEnricher(), job_id, domain_id, domain_name)
+ 
+ 
+@app.task(bind=True, name="enrichment.threatminer")
+def run_threatminer_task(self: Task, job_id: int, domain_id: int, domain_name: str) -> dict:
+    return _run_enricher_task(self, ThreatMinerEnricher(), job_id, domain_id, domain_name)
+
+
 # ----------------------------------------------------------------------------
 # Mapping that the API layer uses to dispatch the right tasks
 # ----------------------------------------------------------------------------
@@ -228,4 +246,7 @@ TASK_FOR_ENRICHMENT_TYPE: dict[EnrichmentType, Task] = {
     EnrichmentType.ABUSEIPDB: run_abuseipdb_task,
     EnrichmentType.AHMIA: run_ahmia_task,
     EnrichmentType.MNEMONIC_PDNS: run_mnemonic_pdns_task,
+    EnrichmentType.URLSCAN: run_urlscan_task,
+    EnrichmentType.HACKERTARGET: run_hackertarget_task,
+    EnrichmentType.THREATMINER: run_threatminer_task,
 }
