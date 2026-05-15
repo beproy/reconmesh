@@ -29,6 +29,7 @@ import { TopologyBackdrop } from '../components/landing/TopologyBackdrop';
 import { FeedStatusPill } from '../components/landing/FeedStatusPill';
 import { SearchHero } from '../components/landing/SearchHero';
 import { SuggestedChips } from '../components/landing/SuggestedChips';
+import { SettingsDialog } from '../components/SettingsDialog';
 import { CapabilityStrip } from '../components/landing/CapabilityStrip';
 import { routeQuery } from '../lib/queryRouter';
 
@@ -136,23 +137,7 @@ export const Landing: React.FC = () => {
           >
             Docs
           </a>
-          <div
-            style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '50%',
-              background: 'var(--rm-bg-surface)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-            aria-hidden="true"
-          >
-            <i
-              className="ti ti-settings"
-              style={{ fontSize: '13px', color: 'var(--rm-text-muted)' }}
-            />
-          </div>
+          <SettingsDialog />
         </div>
       </nav>
 

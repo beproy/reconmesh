@@ -71,7 +71,7 @@ export function SettingsDialog() {
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-xs text-muted-foreground">
                 Configure your ReconMesh API key. The key is stored only in this
-                browser's localStorage.
+                browser tab's sessionStorage and is cleared when the tab closes.
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
