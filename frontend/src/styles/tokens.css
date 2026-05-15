@@ -1,0 +1,153 @@
+/*
+ * ReconMesh design tokens
+ *
+ * These tokens define the visual identity of the intelligence platform.
+ * All --rm-* variables are namespaced to avoid collisions with shadcn/ui.
+ *
+ * Import this once in main.tsx, before any other CSS.
+ */
+
+:root {
+  /* Base canvas — slightly cool-shifted dark, not pure black */
+  --rm-bg-base: #0a0c10;
+  --rm-bg-elevated: #0f1116;
+  --rm-bg-surface: rgba(255, 255, 255, 0.03);
+  --rm-bg-surface-hover: rgba(255, 255, 255, 0.05);
+
+  /* Borders — quiet, thin, semi-transparent */
+  --rm-border-subtle: rgba(255, 255, 255, 0.06);
+  --rm-border-default: rgba(255, 255, 255, 0.10);
+  --rm-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Text — high contrast for data, muted for chrome */
+  --rm-text-primary: #f3f4f6;
+  --rm-text-secondary: #d1d5db;
+  --rm-text-muted: #9ca3af;
+  --rm-text-faint: #6b7280;
+
+  /* Accent — single signal color, used sparingly */
+  --rm-accent-live: #4ade80;        /* live system, fresh data, success */
+  --rm-accent-info: #22d3ee;        /* nodes, capability icons, neutral signal */
+  --rm-accent-glow: rgba(74, 222, 128, 0.06);
+
+  /* Verdict semantics — used on landing chips, investigation pills, evidence rows */
+  --rm-verdict-clean-bg: rgba(74, 222, 128, 0.10);
+  --rm-verdict-clean-text: #4ade80;
+  --rm-verdict-clean-dot: #4ade80;
+
+  --rm-verdict-noteworthy-bg: rgba(245, 158, 11, 0.12);
+  --rm-verdict-noteworthy-text: #fbbf24;
+  --rm-verdict-noteworthy-dot: #f59e0b;
+
+  --rm-verdict-suspicious-bg: rgba(239, 68, 68, 0.12);
+  --rm-verdict-suspicious-text: #fca5a5;
+  --rm-verdict-suspicious-dot: #ef4444;
+
+  --rm-verdict-malicious-bg: rgba(239, 68, 68, 0.18);
+  --rm-verdict-malicious-text: #f87171;
+  --rm-verdict-malicious-dot: #dc2626;
+
+  --rm-verdict-unknown-bg: rgba(156, 163, 175, 0.10);
+  --rm-verdict-unknown-text: #9ca3af;
+  --rm-verdict-unknown-dot: #6b7280;
+
+  /* Typography */
+  --rm-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --rm-font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — keep tight, two sizes do most of the work */
+  --rm-text-hero: 36px;
+  --rm-text-h1: 24px;
+  --rm-text-h2: 18px;
+  --rm-text-body: 15px;
+  --rm-text-small: 13px;
+  --rm-text-mono-data: 13px;
+  --rm-text-micro: 11px;
+  --rm-text-label: 10px;
+
+  /* Spacing rhythm */
+  --rm-space-xs: 4px;
+  --rm-space-sm: 8px;
+  --rm-space-md: 16px;
+  --rm-space-lg: 24px;
+  --rm-space-xl: 32px;
+  --rm-space-2xl: 48px;
+  --rm-space-3xl: 80px;
+
+  /* Radii */
+  --rm-radius-sm: 6px;
+  --rm-radius-md: 8px;
+  --rm-radius-lg: 12px;
+  --rm-radius-xl: 14px;
+  --rm-radius-pill: 999px;
+}
+
+/*
+ * Page-level dark background.
+ * Apply on <body> or top-level layout wrapper so the canvas extends edge-to-edge.
+ */
+.rm-canvas {
+  background: var(--rm-bg-base);
+  color: var(--rm-text-primary);
+  font-family: var(--rm-font-sans);
+  min-height: 100vh;
+}
+
+/*
+ * Mono utility for data fragments inside prose.
+ * Used wherever a domain, IP, hash, ASN, or timestamp appears inline.
+ */
+.rm-mono {
+  font-family: var(--rm-font-mono);
+  font-feature-settings: 'liga' 0, 'calt' 0;
+}
+
+/*
+ * Live indicator pulse — the single allowed persistent motion on the page.
+ * Wraps a 6px dot. Animation respects prefers-reduced-motion.
+ */
+@keyframes rm-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50%      { opacity: 0.6; transform: scale(1.4); }
+}
+
+.rm-live-dot {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  display: inline-block;
+}
+
+.rm-live-dot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--rm-accent-live);
+}
+
+.rm-live-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: var(--rm-accent-live);
+  opacity: 0.3;
+  animation: rm-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rm-live-dot::after {
+    animation: none;
+  }
+}
+
+/*
+ * Focus ring for search hero.
+ * Used by SearchHero when input is focused.
+ */
+.rm-focus-ring {
+  box-shadow: 0 0 0 4px var(--rm-accent-glow);
+  border-color: var(--rm-border-strong) !important;
+  transition: box-shadow 200ms ease-out, border-color 200ms ease-out;
+}
