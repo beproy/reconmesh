@@ -41,6 +41,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { HeaderStrip } from '@/components/investigation/HeaderStrip';
+import { SummaryBlock } from '@/components/investigation/SummaryBlock';
+import { MetricGrid } from '@/components/investigation/MetricGrid';
 import { computeVerdict } from '@/lib/verdict';
 
 interface CtSubdomain {
@@ -1776,7 +1778,11 @@ export function DomainDetail() {
         isEnriching={isJobInFlight}
       />
 
-      {/* Job progress card — only shown while a job is active */}
+      <SummaryBlock domain={data} />
+
+      <MetricGrid domain={data} />
+
+      {/* Job progress card â€” only shown while a job is active */}
       {jobQuery.data && (jobQuery.data.status === 'pending' || jobQuery.data.status === 'running') && (
         <JobProgressCard job={jobQuery.data} />
       )}
