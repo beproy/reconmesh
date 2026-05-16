@@ -40,6 +40,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { HeaderStrip } from '@/components/investigation/HeaderStrip';
+import { computeVerdict } from '@/lib/verdict';
 
 interface CtSubdomain {
   name: string;
@@ -1762,43 +1764,17 @@ export function DomainDetail() {
     (e) => e.enrichment_type === 'threatminer'
   );
 
+  const verdict = computeVerdict(data);
+
   return (
     <div>
-      <Link
-        to="/"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" /> Back to search
-      </Link>
-
-      <div className="flex items-center gap-4">
-        <div className="flex items-baseline gap-3">
-          <h1 className="font-mono text-3xl font-semibold tracking-tight">{data.name}</h1>
-          <span className="text-sm text-muted-foreground">
-            {data.indicators.length} indicator
-            {data.indicators.length === 1 ? '' : 's'}
-          </span>
-        </div>
-        <div className="ml-auto">
-          <Button
-            onClick={() => dispatchMutation.mutate()}
-            disabled={isJobInFlight}
-            size="sm"
-          >
-            {isJobInFlight ? (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                Running...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                {data.enrichments.length > 0 ? 'Re-enrich' : 'Enrich'}
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+      <HeaderStrip
+        domainName={data.name}
+        verdict={verdict}
+        hasEnrichments={data.enrichments.length > 0}
+        onEnrich={() => dispatchMutation.mutate()}
+        isEnriching={isJobInFlight}
+      />
 
       {/* Job progress card — only shown while a job is active */}
       {jobQuery.data && (jobQuery.data.status === 'pending' || jobQuery.data.status === 'running') && (
