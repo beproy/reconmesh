@@ -2,11 +2,10 @@
  * SearchHero
  *
  * The visual hero of the landing page. Large input, integrated submit
- * button, rotating placeholder text, focus glow.
+ * button, static domain placeholder, focus glow.
  *
  * Owns:
  *   - Local focus state (drives the focus ring)
- *   - Placeholder rotation (4-second interval, cycles through example types)
  *
  * Receives:
  *   - value, onChange: controlled input (so SuggestedChips can populate it)
@@ -20,32 +19,16 @@
  * responsibility — this component just emits onSubmit(value).
  */
 
-import React, { useEffect, useRef, useState } from 'react';
-
+import React, { useRef, useState } from 'react';
 interface SearchHeroProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: (value: string) => void;
 }
-
-const PLACEHOLDERS = [
-  'example.com',
-  '8.8.8.8',
-  'sha256:a1b2c3d4...',
-  '192.168.0.0/16',
-];
-
+const PLACEHOLDER = 'example.com';
 export const SearchHero: React.FC<SearchHeroProps> = ({ value, onChange, onSubmit }) => {
   const [focused, setFocused] = useState(false);
-  const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setPlaceholderIdx((i) => (i + 1) % PLACEHOLDERS.length);
-    }, 4000);
-    return () => window.clearInterval(id);
-  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -91,8 +74,8 @@ export const SearchHero: React.FC<SearchHeroProps> = ({ value, onChange, onSubmi
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         onKeyDown={handleKeyDown}
-        placeholder={`Try ${PLACEHOLDERS[placeholderIdx]}`}
-        aria-label="Search domain, IP address, or hash"
+        placeholder={`Try ${PLACEHOLDER}`}
+        aria-label="Search domain"
         spellCheck={false}
         autoComplete="off"
         autoCorrect="off"
