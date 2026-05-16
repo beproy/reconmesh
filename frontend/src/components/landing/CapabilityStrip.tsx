@@ -1,14 +1,8 @@
 /**
  * CapabilityStrip
  *
- * Horizontal manifest of platform capabilities, rendered below the fold
- * on the landing page. Visual style: lowercase snake_case in mono,
- * separated by thin vertical rules. Reads as a system manifest, not
- * a marketing section.
- *
- * Capabilities are pulled from src/config/capabilities.ts. Capabilities
- * with `ready: false` are rendered greyed out to signal "shipping soon"
- * without making the strip feel incomplete.
+ * Grid of platform capabilities with icons, labels and descriptions.
+ * Rendered below the fold on the landing page.
  */
 
 import React from 'react';
@@ -19,7 +13,7 @@ export const CapabilityStrip: React.FC = () => {
     <div
       style={{
         borderTop: '0.5px solid var(--rm-border-subtle)',
-        padding: '28px 28px 32px',
+        padding: '28px 28px 40px',
       }}
     >
       <div
@@ -27,7 +21,7 @@ export const CapabilityStrip: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          marginBottom: '18px',
+          marginBottom: '24px',
         }}
       >
         <span
@@ -62,35 +56,58 @@ export const CapabilityStrip: React.FC = () => {
 
       <div
         style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          fontFamily: 'var(--rm-font-mono)',
-          fontSize: 'var(--rm-text-mono-data)',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '20px',
         }}
       >
-        {CAPABILITIES.map((cap, idx) => (
+        {CAPABILITIES.map((cap) => (
           <div
             key={cap.id}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: idx === 0 ? '6px 18px 6px 0' : '6px 18px',
-              color: cap.ready ? 'var(--rm-text-secondary)' : 'var(--rm-text-faint)',
-              borderLeft: idx === 0 ? 'none' : '0.5px solid var(--rm-border-subtle)',
-              opacity: cap.ready ? 1 : 0.55,
+              padding: '16px',
+              borderRadius: '8px',
+              border: '0.5px solid var(--rm-border-subtle)',
+              opacity: cap.ready ? 1 : 0.45,
             }}
             title={cap.ready ? undefined : 'coming soon'}
           >
-            <i
-              className={`ti ti-${cap.icon}`}
+            <div
               style={{
-                fontSize: '14px',
-                color: cap.ready ? 'var(--rm-accent-info)' : 'var(--rm-text-faint)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '8px',
               }}
-              aria-hidden="true"
-            />
-            {cap.label}
+            >
+              <i
+                className={`ti ti-${cap.icon}`}
+                style={{
+                  fontSize: '15px',
+                  color: cap.ready ? 'var(--rm-accent-info)' : 'var(--rm-text-faint)',
+                }}
+                aria-hidden="true"
+              />
+              <span
+                style={{
+                  fontFamily: 'var(--rm-font-mono)',
+                  fontSize: 'var(--rm-text-mono-data)',
+                  color: cap.ready ? 'var(--rm-text-secondary)' : 'var(--rm-text-faint)',
+                }}
+              >
+                {cap.label}
+              </span>
+            </div>
+            <p
+              style={{
+                fontSize: '12px',
+                lineHeight: 1.5,
+                color: 'var(--rm-text-muted)',
+                margin: 0,
+              }}
+            >
+              {cap.description}
+            </p>
           </div>
         ))}
       </div>

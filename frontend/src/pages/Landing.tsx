@@ -63,23 +63,11 @@ export const Landing: React.FC = () => {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '22px',
-              height: '22px',
-              borderRadius: '6px',
-              background: 'linear-gradient(135deg, #4ade80 0%, #22d3ee 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <i
-              className="ti ti-grid-dots"
-              style={{ fontSize: '13px', color: 'var(--rm-bg-base)' }}
-              aria-hidden="true"
-            />
-          </div>
+          <img
+            src="/brand/favicon-192.png"
+            alt="ReconMesh"
+            style={{ width: '22px', height: '22px' }}
+          />
           <span
             style={{
               fontSize: 'var(--rm-text-small)',
@@ -89,19 +77,6 @@ export const Landing: React.FC = () => {
             }}
           >
             ReconMesh
-          </span>
-          <span
-            className="rm-mono"
-            style={{
-              fontSize: 'var(--rm-text-label)',
-              color: 'var(--rm-text-faint)',
-              border: '0.5px solid var(--rm-border-default)',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              marginLeft: '4px',
-            }}
-          >
-            v0.1
           </span>
         </div>
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
