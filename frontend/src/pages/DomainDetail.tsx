@@ -1435,9 +1435,9 @@ function AhmiaSection(props: { enrichment: Enrichment }) {
               Reverse IP (HackerTarget)
               <StatusIcon status={props.enrichment.status} />
               <span className="ml-auto text-xs font-normal text-muted-foreground">
-                {data.stored}
-                {data.was_capped ? `+ of ${data.total_returned}` : ''} co-hosted hostname
-                {data.stored === 1 ? '' : 's'}
+                {hostnames.length}
+                {hostnames.length < data.total_hostnames ? `+ of ${data.total_hostnames}` : ''} co-hosted hostname
+                {hostnames.length === 1 ? '' : 's'}
               </span>
             </CardTitle>
           </CardHeader>
@@ -1464,7 +1464,7 @@ function AhmiaSection(props: { enrichment: Enrichment }) {
                     onClick={() => setShowAll(!showAll)}
                     className="text-xs text-muted-foreground hover:text-foreground"
                   >
-                    {showAll ? 'Show less' : `Show all ${data.stored} stored hostnames`}
+                    {showAll ? 'Show less' : `Show all ${hostnames.length} stored hostnames`}
                   </button>
                 )}
  
