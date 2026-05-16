@@ -1788,40 +1788,6 @@ export function DomainDetail() {
         <JobProgressCard job={jobQuery.data} />
       )}
 
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-base">Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
-            <div>
-              <div className="text-xs uppercase text-muted-foreground">TLD</div>
-              <div className="font-mono">{data.tld || '—'}</div>
-            </div>
-            <div>
-              <div className="text-xs uppercase text-muted-foreground">First seen</div>
-              <div>{fmtDate(data.first_seen)}</div>
-            </div>
-            <div>
-              <div className="text-xs uppercase text-muted-foreground">Last seen</div>
-              <div>{fmtDate(data.last_seen)}</div>
-            </div>
-            <div>
-              <div className="text-xs uppercase text-muted-foreground">Registrar</div>
-              <div>{data.registrar || '—'}</div>
-            </div>
-            <div>
-              <div className="text-xs uppercase text-muted-foreground">Risk score</div>
-              <div>{data.risk_score ?? '—'}</div>
-            </div>
-            <div>
-              <div className="text-xs uppercase text-muted-foreground">Indicators</div>
-              <div>{data.indicators.length}</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {dispatchMutation.isError && (
         <Card className="mt-4 border-destructive/50">
           <CardContent className="py-3 text-sm text-destructive">
