@@ -285,6 +285,33 @@ export interface Enrichment {
   fetched_at: string;
 }
 
+
+// ----------------------------------------------------------------------------
+// AI Summary types (Session 22)
+// ----------------------------------------------------------------------------
+export interface AiSummaryResponse {
+  domain: string;
+  sector_assessment: {
+    likely_sector: string | null;
+    confidence: 'high' | 'medium' | 'low';
+    reasoning: string;
+  };
+  risk_summary: {
+    overall_risk: 'critical' | 'high' | 'medium' | 'low' | 'informational';
+    key_findings: string[];
+    concerns: string[];
+    positives: string[];
+  };
+  enrichment_highlights: Record<string, string | null>;
+  relevant_threat_actors: {
+    attack_id: string;
+    name: string;
+    relevance: string;
+  }[];
+  recommendation: string;
+  error?: string;
+}
+
 // ----------------------------------------------------------------------------
 // Async enrichment job types
 // ----------------------------------------------------------------------------
@@ -485,4 +512,9 @@ export const api = {
 
   getAttackTechnique: (attackId: string) =>
     request<AttackTechniqueDetail>(`/attack/techniques/${encodeURIComponent(attackId)}`),
+// AI Summary (Session 22)
+  getAiSummary: (domainName: string) =>
+    request<AiSummaryResponse>(`/domains/${encodeURIComponent(domainName)}/ai-summary`, {
+      method: 'POST',
+    }),  
 };

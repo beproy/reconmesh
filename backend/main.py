@@ -925,3 +925,59 @@ def get_stats(db: Session = Depends(get_db)):
         attack_groups=db.query(AttackGroup).count(),
         attack_techniques=db.query(AttackTechnique).count(),
     )
+
+# ----------------------------------------------------------------------------
+# AI Summary (Session 22)
+# ----------------------------------------------------------------------------
+@app.post(
+    "/domains/{domain_name}/ai-summary",
+    summary="Generate an AI-powered investigation summary",
+)
+async def domain_ai_summary(
+    domain_name: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Collects all enrichment data for a domain, queries relevant MITRE
+    ATT&CK groups, and sends everything to Gemini for a structured
+    threat intelligence summary.
+
+    Requires GEMINI_API_KEY to be set. Returns 503 if unavailable.
+    """
+    from ai_summary import generate_ai_summary, GEMINI_API_KEY
+
+    if not GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI summary unavailable — GEMINI_API_KEY not configured",
+        )
+
+    name_normalized = domain_name.lower().strip()
+    domain = (
+        db.query(Domain)
+        .options(joinedload(Domain.enrichments))
+        .filter(Domain.name == name_normalized)
+        .first()
+    )
+
+    if domain is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Domain '{name_normalized}' not found",
+        )
+
+    if not domain.enrichments:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No enrichment data available. Run enrichment first.",
+        )
+
+    result = await generate_ai_summary(name_normalized, domain.enrichments, db)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI summary generation failed",
+        )
+
+    return result

@@ -1,50 +1,51 @@
-import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  RefreshCw,
-  Globe,
-  Shield,
-  FileText,
-  Award,
-  AlertCircle,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Search,
-  Target,
-  ShieldCheck,
-  Radar,
-  AlertOctagon,
-} from 'lucide-react';
-import {
-  api,
-  type Domain,
-  type Enrichment,
-  type DnsData,
-  type EmailSecurityData,
-  type WhoisData,
-  type TypoSquatData,
-  type VirusTotalData,
-  type ShodanData,
-  type AbuseIPDBData,
-  type AhmiaData,
-  type MnemonicPdnsData,
-  type UrlscanData,
-  type HackerTargetData,
-  type ThreatMinerData,
-  type EnrichJob,
-} from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EvidenceRow } from '@/components/investigation/EvidenceRow';
+import { AiSummary } from '@/components/investigation/AiSummary';
+import { HeaderStrip } from '@/components/investigation/HeaderStrip';
+import { MetricGrid } from '@/components/investigation/MetricGrid';
+import { SummaryBlock } from '@/components/investigation/SummaryBlock';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { HeaderStrip } from '@/components/investigation/HeaderStrip';
-import { SummaryBlock } from '@/components/investigation/SummaryBlock';
-import { MetricGrid } from '@/components/investigation/MetricGrid';
-import { EvidenceRow } from '@/components/investigation/EvidenceRow';
+import {
+  api,
+  type AbuseIPDBData,
+  type AhmiaData,
+  type DnsData,
+  type Domain,
+  type EmailSecurityData,
+  type EnrichJob,
+  type Enrichment,
+  type HackerTargetData,
+  type MnemonicPdnsData,
+  type ShodanData,
+  type ThreatMinerData,
+  type TypoSquatData,
+  type UrlscanData,
+  type VirusTotalData,
+  type WhoisData,
+} from '@/lib/api';
 import { computeVerdict } from '@/lib/verdict';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  AlertCircle,
+  AlertOctagon,
+  ArrowLeft,
+  Award,
+  CheckCircle2,
+  Clock,
+  FileText,
+  Globe,
+  Radar,
+  RefreshCw,
+  Search,
+  Shield,
+  ShieldCheck,
+  Target,
+  XCircle,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 
 interface CtSubdomain {
   name: string;
@@ -1782,6 +1783,7 @@ export function DomainDetail() {
       <SummaryBlock domain={data} />
 
       <MetricGrid domain={data} />
+      <AiSummary domainName={data.name} hasEnrichments={data.enrichments.length > 0} />
 
       {/* Job progress card â€” only shown while a job is active */}
       {jobQuery.data && (jobQuery.data.status === 'pending' || jobQuery.data.status === 'running') && (

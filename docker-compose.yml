@@ -57,6 +57,7 @@ services:
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
       ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
       URLSCAN_API_KEY: ${URLSCAN_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       ADMIN_BOOTSTRAP_TOKEN: ${ADMIN_BOOTSTRAP_TOKEN}
     ports:
       # Only the backend's HTTP port is exposed to your laptop
@@ -94,6 +95,7 @@ services:
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
       ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
       URLSCAN_API_KEY: ${URLSCAN_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       ADMIN_BOOTSTRAP_TOKEN: ${ADMIN_BOOTSTRAP_TOKEN}
       REDIS_HOST: redis
       REDIS_PORT: 6379
