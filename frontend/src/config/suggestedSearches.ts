@@ -20,8 +20,7 @@ export interface SuggestedSearch {
 }
 
 export const SUGGESTED_SEARCHES: SuggestedSearch[] = [
-  { value: 'microsoft.com',  verdict: 'clean' },
+  { value: 'google.com',     verdict: 'clean' },
   { value: 'cloudflare.com', verdict: 'clean' },
-  { value: '8.8.8.8',        verdict: 'clean' },
-  { value: 'telegram.org',   verdict: 'noteworthy' },
+  { value: 'github.com',     verdict: 'clean' },
 ];
