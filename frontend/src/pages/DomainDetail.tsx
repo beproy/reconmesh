@@ -43,6 +43,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { HeaderStrip } from '@/components/investigation/HeaderStrip';
 import { SummaryBlock } from '@/components/investigation/SummaryBlock';
 import { MetricGrid } from '@/components/investigation/MetricGrid';
+import { EvidenceRow } from '@/components/investigation/EvidenceRow';
 import { computeVerdict } from '@/lib/verdict';
 
 interface CtSubdomain {
@@ -1837,65 +1838,152 @@ export function DomainDetail() {
           </CardContent>
         </Card>
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {dnsEnrichment && <DnsSection enrichment={dnsEnrichment} />}
+        <div className="mt-6">
+          {/* 1. DNS & Infrastructure */}
+          {(dnsEnrichment || hackertargetEnrichment || ctEnrichment) && (
+            <EvidenceRow
+              title="DNS & Infrastructure"
+              summary={
+                dnsEnrichment && dnsEnrichment.status === 'ok'
+                  ? `${Object.values((dnsEnrichment.data as DnsData).records || {}).reduce((acc, arr) => acc + arr.length, 0)} records`
+                  : undefined
+              }
+              status={dnsEnrichment?.status === 'ok' ? 'clean' : 'neutral'}
+              defaultOpen
+            >
+              {dnsEnrichment && <DnsSection enrichment={dnsEnrichment} />}
+              {hackertargetEnrichment && (
+                <HackerTargetSection enrichment={hackertargetEnrichment} />
+              )}
+              {ctEnrichment && <CertTransparencySection enrichment={ctEnrichment} />}
+            </EvidenceRow>
+          )}
+
+          {/* 2. Email Security */}
           {emailSecEnrichment && (
-            <EmailSecuritySection enrichment={emailSecEnrichment} />
+            <EvidenceRow
+              title="Email Security"
+              summary={
+                emailSecEnrichment.status === 'ok'
+                  ? `${(emailSecEnrichment.data as EmailSecurityData).posture.tier} · ${(emailSecEnrichment.data as EmailSecurityData).posture.score}/100`
+                  : undefined
+              }
+              status={
+                emailSecEnrichment.status !== 'ok'
+                  ? 'neutral'
+                  : (emailSecEnrichment.data as EmailSecurityData).posture.tier === 'strong'
+                  ? 'clean'
+                  : (emailSecEnrichment.data as EmailSecurityData).posture.tier === 'partial'
+                  ? 'mixed'
+                  : 'investigate'
+              }
+            >
+              <EmailSecuritySection enrichment={emailSecEnrichment} />
+            </EvidenceRow>
           )}
-          {whoisEnrichment && (
-            <div className="lg:col-span-2">
-              <WhoisSection enrichment={whoisEnrichment} />
-            </div>
+
+          {/* 3. Reputation */}
+          {(vtEnrichment || abuseipdbEnrichment || threatminerEnrichment) && (
+            <EvidenceRow
+              title="Reputation"
+              summary={
+                vtEnrichment && vtEnrichment.status === 'ok'
+                  ? `${(vtEnrichment.data as VirusTotalData).analysis_stats.malicious}/${(vtEnrichment.data as VirusTotalData).analysis_stats.total} flag`
+                  : undefined
+              }
+              status={
+                vtEnrichment?.status === 'ok' &&
+                (vtEnrichment.data as VirusTotalData).verdict === 'malicious'
+                  ? 'investigate'
+                  : vtEnrichment?.status === 'ok' &&
+                    (vtEnrichment.data as VirusTotalData).verdict === 'suspicious'
+                  ? 'mixed'
+                  : vtEnrichment?.status === 'ok'
+                  ? 'clean'
+                  : 'neutral'
+              }
+            >
+              {vtEnrichment && <VirusTotalSection enrichment={vtEnrichment} />}
+              {abuseipdbEnrichment && (
+                <AbuseIPDBSection enrichment={abuseipdbEnrichment} />
+              )}
+              {threatminerEnrichment && (
+                <ThreatMinerSection enrichment={threatminerEnrichment} />
+              )}
+            </EvidenceRow>
           )}
-          {ctEnrichment && (
-            <div className="lg:col-span-2">
-              <CertTransparencySection enrichment={ctEnrichment} />
-            </div>
+
+          {/* 4. Passive DNS & Pivots */}
+          {(mnemonicEnrichment || shodanEnrichment || urlscanEnrichment) && (
+            <EvidenceRow
+              title="Passive DNS & Pivots"
+              summary={
+                mnemonicEnrichment && mnemonicEnrichment.status === 'ok'
+                  ? `${(mnemonicEnrichment.data as MnemonicPdnsData).total_records} records`
+                  : undefined
+              }
+              status="neutral"
+            >
+              {mnemonicEnrichment && <MnemonicPdnsSection enrichment={mnemonicEnrichment} />}
+              {shodanEnrichment && <ShodanSection enrichment={shodanEnrichment} />}
+              {urlscanEnrichment && <UrlscanSection enrichment={urlscanEnrichment} />}
+            </EvidenceRow>
           )}
-          {typoSquatEnrichment && (
-            <div className="lg:col-span-2">
-              <TypoSquatSection enrichment={typoSquatEnrichment} />
-            </div>
-          )}
-          {vtEnrichment && (
-            <div className="lg:col-span-2">
-              <VirusTotalSection enrichment={vtEnrichment} />
-            </div>
-          )}
-          {shodanEnrichment && (
-            <div className="lg:col-span-2">
-              <ShodanSection enrichment={shodanEnrichment} />
-            </div>
-          )}
-          {abuseipdbEnrichment && (
-            <div className="lg:col-span-2">
-              <AbuseIPDBSection enrichment={abuseipdbEnrichment} />
-            </div>
-          )}
+
+          {/* 5. Dark Web Mentions */}
           {ahmiaEnrichment && (
-            <div className="lg:col-span-2">
+            <EvidenceRow
+              title="Dark Web Mentions"
+              summary={
+                ahmiaEnrichment.status === 'ok'
+                  ? `${(ahmiaEnrichment.data as AhmiaData).mention_count} mention${(ahmiaEnrichment.data as AhmiaData).mention_count === 1 ? '' : 's'}`
+                  : undefined
+              }
+              status={
+                ahmiaEnrichment.status !== 'ok'
+                  ? 'neutral'
+                  : (ahmiaEnrichment.data as AhmiaData).mention_count >= 3
+                  ? 'investigate'
+                  : (ahmiaEnrichment.data as AhmiaData).mention_count >= 1
+                  ? 'mixed'
+                  : 'clean'
+              }
+              defaultOpen={
+                ahmiaEnrichment.status === 'ok' &&
+                (ahmiaEnrichment.data as AhmiaData).mention_count > 0
+              }
+            >
               <AhmiaSection enrichment={ahmiaEnrichment} />
-            </div>
+            </EvidenceRow>
           )}
-          {mnemonicEnrichment && (
-            <div className="lg:col-span-2">
-              <MnemonicPdnsSection enrichment={mnemonicEnrichment} />
-            </div>
-          )}
-          {urlscanEnrichment && (
-            <div className="lg:col-span-2">
-              <UrlscanSection enrichment={urlscanEnrichment} />
-            </div>
-          )}
-          {hackertargetEnrichment && (
-            <div className="lg:col-span-2">
-              <HackerTargetSection enrichment={hackertargetEnrichment} />
-            </div>
-          )}
-          {threatminerEnrichment && (
-            <div className="lg:col-span-2">
-              <ThreatMinerSection enrichment={threatminerEnrichment} />
-            </div>
+
+          {/* 6. WHOIS & Typosquats */}
+          {(whoisEnrichment || typoSquatEnrichment) && (
+            <EvidenceRow
+              title="WHOIS & Typosquats"
+              summary={
+                typoSquatEnrichment && typoSquatEnrichment.status === 'ok'
+                  ? `${(typoSquatEnrichment.data as TypoSquatData).alive_count} live`
+                  : whoisEnrichment && whoisEnrichment.status === 'ok'
+                  ? (whoisEnrichment.data as WhoisData).registrar || undefined
+                  : undefined
+              }
+              status={
+                typoSquatEnrichment?.status === 'ok' &&
+                (typoSquatEnrichment.data as TypoSquatData).alive_count >= 3
+                  ? 'investigate'
+                  : typoSquatEnrichment?.status === 'ok' &&
+                    (typoSquatEnrichment.data as TypoSquatData).alive_count >= 1
+                  ? 'mixed'
+                  : typoSquatEnrichment?.status === 'ok'
+                  ? 'clean'
+                  : 'neutral'
+              }
+              defaultOpen
+            >
+              {whoisEnrichment && <WhoisSection enrichment={whoisEnrichment} />}
+              {typoSquatEnrichment && <TypoSquatSection enrichment={typoSquatEnrichment} />}
+            </EvidenceRow>
           )}
         </div>
       )}
