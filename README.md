@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/brand/logo-black-bg.png" alt="ReconMesh" width="280" />
+  <img src="frontend/public/brand/logo-black-bg.png" alt="ReconMesh" width="380" />
 </p>
 
 <h3 align="center">Domain-centric OSINT &amp; threat intelligence aggregator</h3>
