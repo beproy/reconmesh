@@ -69,4 +69,11 @@ export const CAPABILITIES: Capability[] = [
     icon: 'eye-off',
     ready: true,
   },
+  {
+    id: 'ai_threat_summary',
+    label: 'ai_threat_summary',
+    description: 'AI-powered investigation summaries with sector-aware threat actor mapping.',
+    icon: 'brain',
+    ready: true,
+  },
 ];

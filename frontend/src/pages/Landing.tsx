@@ -181,8 +181,7 @@ export const Landing: React.FC = () => {
                 lineHeight: 1.5,
               }}
             >
-              One search across malware feeds, ransomware leaks, certificate transparency,
-              and DNS intelligence.
+              One search across malware feeds, ransomware leaks, certificate transparency, DNS intelligence, and AI-powered threat analysis.
             </p>
 
             <SearchHero

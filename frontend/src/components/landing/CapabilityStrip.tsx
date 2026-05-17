@@ -9,6 +9,8 @@ import React from 'react';
 import { CAPABILITIES } from '../../config/capabilities';
 
 export const CapabilityStrip: React.FC = () => {
+  const remainder = CAPABILITIES.length % 3;
+
   return (
     <div
       style={{
@@ -61,7 +63,7 @@ export const CapabilityStrip: React.FC = () => {
           gap: '20px',
         }}
       >
-        {CAPABILITIES.map((cap) => (
+        {CAPABILITIES.map((cap, index) => (
           <div
             key={cap.id}
             style={{
@@ -69,6 +71,9 @@ export const CapabilityStrip: React.FC = () => {
               borderRadius: '8px',
               border: '0.5px solid var(--rm-border-subtle)',
               opacity: cap.ready ? 1 : 0.45,
+              ...(remainder === 1 && index === CAPABILITIES.length - 1
+                ? { gridColumn: '2' }
+                : {}),
             }}
             title={cap.ready ? undefined : 'coming soon'}
           >

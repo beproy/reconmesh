@@ -12,6 +12,7 @@ export default defineConfig({
     },
   },
   server: {
+    allowedHosts: [".trycloudflare.com"],
     host: '0.0.0.0',
     port: 5173,
     // Use polling for file watching — required on Windows/Docker volume mounts
