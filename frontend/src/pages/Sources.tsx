@@ -1,195 +1,204 @@
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import {
-  Database,
-  ExternalLink,
-  Rss,
-  FileText,
-  User,
-  ShieldAlert,
-  Layers,
-} from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { api, type SourceListItem } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SourceCard, type SourceStatus } from '@/components/sources/SourceCard';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 
-// Map source_type strings to icons + display labels.
-// Source types come from the SourceType enum in models.py.
-const SOURCE_TYPE_META: Record<string, { icon: typeof Database; label: string }> = {
-  feed: { icon: Rss, label: 'Feed' },
-  report: { icon: FileText, label: 'Report' },
-  manual: { icon: User, label: 'Manual' },
-  misp_event: { icon: ShieldAlert, label: 'MISP event' },
-  stix_bundle: { icon: Layers, label: 'STIX bundle' },
-};
-
-function getMeta(sourceType: string) {
-  return SOURCE_TYPE_META[sourceType] || { icon: Database, label: sourceType };
+// ----------------------------------------------------------------------------
+// Static Ingesters Metadata
+// The names match character-for-character and case-sensitively with the keys
+// returned by the backend.
+// ----------------------------------------------------------------------------
+interface StaticIngester {
+  name: string;
+  description: string;
+  upstreamUrl: string;
 }
 
-// ----------------------------------------------------------------------------
-// One source card
-// ----------------------------------------------------------------------------
-function SourceCard(props: { source: SourceListItem }) {
-  const s = props.source;
-  const meta = getMeta(s.source_type);
-  const Icon = meta.icon;
+const STATIC_INGESTERS: StaticIngester[] = [
+  {
+    name: 'URLhaus',
+    description: 'Database of malicious URLs that are being used for malware distribution.',
+    upstreamUrl: 'https://urlhaus.abuse.ch/',
+  },
+  {
+    name: 'OTX',
+    description: 'AlienVault Open Threat Exchange open-source collaborative threat intelligence feed.',
+    upstreamUrl: 'https://otx.alienvault.com/',
+  },
+  {
+    name: 'ThreatFox',
+    description: 'Platform that shares indicator of compromise (IOCs) associated with malware.',
+    upstreamUrl: 'https://threatfox.abuse.ch/',
+  },
+  {
+    name: 'Ransomware.live',
+    description: 'Ransomware activities monitoring feed capturing negotiation, publication, and victims leaks.',
+    upstreamUrl: 'https://www.ransomware.live/',
+  },
+];
 
-  return (
-    <Card className="transition-colors hover:border-primary/40">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-start gap-3 text-base">
-          <Icon className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2">
-              <span className="font-medium text-foreground">{s.name}</span>
-              <Badge className="bg-muted text-muted-foreground border-border text-xs">
-                {meta.label}
-              </Badge>
-            </div>
-          </div>
-          <div className="shrink-0 text-right">
-            <div className="font-mono text-lg font-semibold text-foreground">
-              {s.indicator_count.toLocaleString()}
-            </div>
-            <div className="text-xs text-muted-foreground">indicators</div>
-          </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 pt-0">
-        {s.description && (
-          <p className="text-sm text-muted-foreground">{s.description}</p>
-        )}
-        {s.url && (
-          <a
-            href={s.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ExternalLink className="h-3 w-3" />
-            <span className="break-all">{s.url}</span>
-          </a>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// Page
-// ----------------------------------------------------------------------------
 export function Sources() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error } = useQuery<SourceListItem[], Error>({
     queryKey: ['sources'],
     queryFn: () => api.listSources(),
   });
 
-  // Group sources by source_type for cleaner presentation when there are many.
-  // For each group we precompute the total indicator count.
-  const grouped = (data ?? []).reduce<Record<string, SourceListItem[]>>(
-    (acc, src) => {
-      const key = src.source_type;
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(src);
-      return acc;
-    },
-    {}
-  );
-
-  // Order: feed first, then stix_bundle (MITRE), then the rest by name.
-  const typeOrder = ['feed', 'stix_bundle', 'misp_event', 'report', 'manual'];
-  const orderedKeys = Object.keys(grouped).sort((a, b) => {
-    const ai = typeOrder.indexOf(a);
-    const bi = typeOrder.indexOf(b);
-    if (ai === -1 && bi === -1) return a.localeCompare(b);
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
-
-  const totalIndicators = (data ?? []).reduce(
-    (sum, s) => sum + s.indicator_count,
-    0
-  );
-
   return (
-    <div>
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-3xl font-semibold tracking-tight">Sources</h1>
-        <Link
-          to="/"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          Back to search
-        </Link>
+    <div style={{ padding: '0 24px 24px 24px', maxWidth: '1200px', margin: '0 auto' }}>
+      {/* Header Strip — visually identical to HeaderStrip.tsx structure */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '24px',
+          padding: '24px 0 20px 0',
+          borderBottom: '1px solid var(--rm-border-subtle)',
+          marginBottom: '24px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0 }}>
+          <Link
+            to="/"
+            aria-label="Back to search"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              color: 'var(--rm-text-muted)',
+              textDecoration: 'none',
+              transition: 'background-color 120ms ease, color 120ms ease',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.backgroundColor =
+                'var(--rm-bg-surface-hover)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLAnchorElement).style.backgroundColor = 'transparent';
+            }}
+          >
+            <ArrowLeft size={18} />
+          </Link>
+
+          <h1
+            style={{
+              margin: 0,
+              fontSize: '28px',
+              fontWeight: 600,
+              letterSpacing: '-0.01em',
+              color: 'var(--rm-text-primary)',
+            }}
+          >
+            Sources
+          </h1>
+        </div>
       </div>
 
-      <p className="mt-2 text-sm text-muted-foreground">
-        Threat intelligence feeds and other inputs ReconMesh has ingested data from.
-        {data && data.length > 0 && (
-          <span>
-            {' '}
-            <span className="font-mono text-foreground">
-              {data.length}
-            </span>{' '}
-            source{data.length === 1 ? '' : 's'} ·{' '}
-            <span className="font-mono text-foreground">
-              {totalIndicators.toLocaleString()}
-            </span>{' '}
-            indicators total.
-          </span>
-        )}
+      {/* Description Paragraph */}
+      <p
+        style={{
+          margin: '0 0 24px 0',
+          fontSize: '14px',
+          lineHeight: '1.6',
+          color: 'var(--rm-text-secondary)',
+        }}
+      >
+        Threat intelligence feeds and ingesters configured in the ReconMesh pipeline.
+        Data is dynamically parsed and loaded into the database on regular schedules.
       </p>
 
-      <div className="mt-8 space-y-6">
-        {isLoading && (
-          <div className="space-y-3">
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-full" />
-          </div>
-        )}
+      {/* Error notification block (does not break the rest of the page layout) */}
+      {error && (
+        <div
+          style={{
+            padding: '12px 16px',
+            borderRadius: '10px',
+            backgroundColor: 'var(--rm-verdict-malicious-bg)',
+            border: '1px solid var(--rm-border-subtle)',
+            color: 'var(--rm-verdict-malicious-text)',
+            fontSize: '13px',
+            marginBottom: '24px',
+          }}
+        >
+          Failed to fetch current ingestion states: {error.message}. Displaying cached structure.
+        </div>
+      )}
 
-        {error && (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-destructive">
-              Failed to load sources: {(error as Error).message}
-            </CardContent>
-          </Card>
-        )}
+      {/* Loading Skeletons — uses shadcn <Skeleton> which has animate-pulse built in */}
+      {isLoading && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '16px',
+          }}
+        >
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              style={{
+                borderRadius: '10px',
+                border: '1px solid var(--rm-border-subtle)',
+                padding: '16px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+              }}
+            >
+              <Skeleton className="h-5 w-3/5" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-8 w-4/5" />
+            </div>
+          ))}
+        </div>
+      )}
 
-        {data && data.length === 0 && (
-          <Card>
-            <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              No sources ingested yet.
-            </CardContent>
-          </Card>
-        )}
+      {/* Main Grid — 2x2 layout on desktop, responsive wrapper */}
+      {!isLoading && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '16px',
+          }}
+        >
+          {STATIC_INGESTERS.map((ingester) => {
+            // Match the static metadata item with active API data
+            const matchedApiSource = (data ?? []).find(
+              (x) => x.name === ingester.name
+            );
 
-        {data &&
-          data.length > 0 &&
-          orderedKeys.map((key) => {
-            const sources = grouped[key];
-            const meta = getMeta(key);
+            const count = matchedApiSource ? matchedApiSource.indicator_count : null;
+            
+            // Healthy if the source is ingested and has more than 0 indicators.
+            // If it is missing or has 0, render it as unknown / not yet run.
+            const status: SourceStatus =
+              count !== null && count > 0 ? 'healthy' : 'unknown';
+
+            // TODO: Replace null with matchedApiSource.last_successful_ingestion_timestamp once
+            // backend ingestion logs database tables/columns or endpoint fields are fully implemented.
+            const lastIngested = null;
+
             return (
-              <div key={key}>
-                <h2 className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  <meta.icon className="h-3.5 w-3.5" />
-                  {meta.label}
-                  <span className="font-mono normal-case">
-                    ({sources.length})
-                  </span>
-                </h2>
-                <div className="space-y-3">
-                  {sources.map((src) => (
-                    <SourceCard key={src.id} source={src} />
-                  ))}
-                </div>
-              </div>
+              <SourceCard
+                key={ingester.name}
+                name={ingester.name}
+                description={ingester.description}
+                indicatorCount={count}
+                lastIngested={lastIngested}
+                status={status}
+                upstreamUrl={ingester.upstreamUrl}
+              />
             );
           })}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
